@@ -62,7 +62,7 @@ coverage.xml
 .ruff_cache/
 
 # SSL Certificates
-mcp_server/certs/*.pem
+certs/*.pem
 
 # IDE files
 .vscode/

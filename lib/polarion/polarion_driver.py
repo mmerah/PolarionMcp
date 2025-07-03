@@ -4,11 +4,16 @@ Polarion driver class - Read-only access to Polarion data
 
 import atexit
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
 from polarion.document import Document
 from polarion.polarion import Polarion
+
+
+class PolarionConnectionException(Exception):
+    """Exception raised when there are issues with Polarion connection."""
+
+    pass
 
 
 class PolarionDriver:
@@ -38,13 +43,15 @@ class PolarionDriver:
             )
         except Exception as err:
             if err.args[0] == "Cannot login because WSDL has no SessionWebService":
-                raise Exception("Invalid polarion URL!")
+                raise PolarionConnectionException("Invalid polarion URL!")
             elif err.args[0] == f"Could not log in to Polarion for user {self._user}":
-                raise Exception(
+                raise PolarionConnectionException(
                     f"Invalid credentials for user '{self._user}'. Please check your token."
                 )
             else:
-                raise
+                raise PolarionConnectionException(
+                    f"Failed to connect to Polarion: {str(err)}"
+                )
 
         atexit.unregister(self._polarion._atexit_cleanup)
         return self
@@ -96,7 +103,12 @@ class PolarionDriver:
         assert (
             self._project
         ), "No active project! Please first select your desired project. Use `.select_project()`."
-        return self._project.getWorkitem(workitem_id)
+        try:
+            return self._project.getWorkitem(workitem_id)
+        except Exception as e:
+            raise PolarionConnectionException(
+                f"Failed to get work item {workitem_id}: {str(e)}"
+            )
 
     def search_workitems(
         self, query: str, field_list: Optional[List[str]] = None
@@ -105,7 +117,12 @@ class PolarionDriver:
         assert (
             self._project
         ), "No active project! Please first select your desired project. Use `.select_project()`."
-        return self._project.searchWorkitem(query=query, field_list=field_list)  # type: ignore[no-any-return]
+        try:
+            return self._project.searchWorkitem(query=query, field_list=field_list)  # type: ignore[no-any-return]
+        except Exception as e:
+            raise PolarionConnectionException(
+                f"Failed to search work items with query '{query}': {str(e)}"
+            )
 
     def get_project_info(self) -> Dict[str, str]:
         """Get current project information."""
@@ -119,45 +136,24 @@ class PolarionDriver:
         }
 
     def get_test_runs(self) -> List[Any]:
-        """Get all test runs in the current project."""
+        """
+        Get all test runs in the current project.
+
+        Note: This method searches for work items with type 'verificationTest'.
+        This is the standard type for test cases/test runs in many Polarion instances.
+        """
         assert (
             self._project
         ), "No active project! Please first select your desired project. Use `.select_project()`."
-        # Use search to find test runs - try different possible type names
+
         try:
-            # First try 'testrun'
             result = self._project.searchWorkitem(
-                query="type:testrun", field_list=["id", "title", "status", "created", "updated"]
+                query="type:verificationTest",
+                field_list=["id", "title", "status", "created", "updated"],
             )
-            if result:
-                return result
-                
-            # If no testrun, try 'test-run'
-            result = self._project.searchWorkitem(
-                query="type:test-run", field_list=["id", "title", "status", "created", "updated"] 
-            )
-            if result:
-                return result
-                
-            # If no test-run, try 'execution'
-            result = self._project.searchWorkitem(
-                query="type:execution", field_list=["id", "title", "status", "created", "updated"]
-            )
-            if result:
-                return result
-                
-            # If no execution, try 'verificationTest' (common in verification projects)
-            result = self._project.searchWorkitem(
-                query="type:verificationTest", field_list=["id", "title", "status", "created", "updated"]
-            )
-            if result:
-                return result
-                
-            # If none found, return empty list
-            return []
-        except Exception:
-            # If any query fails, return empty list
-            return []
+            return result if result else []
+        except Exception as e:
+            raise PolarionConnectionException(f"Failed to get test runs: {str(e)}")
 
     def get_documents(self) -> List[Any]:
         """Get all documents in the current project."""
@@ -176,11 +172,12 @@ class PolarionDriver:
         assert (
             self._project
         ), "No active project! Please first select your desired project. Use `.select_project()`."
-        # Use getWorkitem since getTestRun might not exist
         try:
             return self._project.getWorkitem(test_run_id)
-        except Exception:
-            return None
+        except Exception as e:
+            raise PolarionConnectionException(
+                f"Failed to get test run {test_run_id}: {str(e)}"
+            )
 
     def __get_document_by_id(self, doc_id: str) -> Optional[Document]:
         assert self._project, "No active project!"

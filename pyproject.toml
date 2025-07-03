@@ -3,32 +3,43 @@ requires = ["setuptools>=64.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mcp-polarion-server"
-version = "1.0.0"
-description = "A production-ready, OpenAPI-compatible HTTPS server that provides read-only access to Polarion instances"
+name = "mcp-polarion"
+version = "0.1.0"
+description = "A Model Context Protocol server for providing read-only access to Polarion ALM."
 readme = "README.md"
 license = "MIT"
 authors = [
-    {name = "MCP Polarion Server Contributors"},
+    {name = "Mounir Merah", email="mounir.mohammedimerah@gmail.com"},
 ]
+keywords = ["polarion", "mcp", "llm", "automation", "testing"]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.24.0",
-    "pydantic-settings>=2.0.0",
-    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
     "polarion>=1.0.0",
     "mcp>=1.2.0",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
 ]
 
+[project.urls]
+"Homepage" = "https://github.com/mmerah/PolarionMcp"
+"Bug Tracker" = "https://github.com/mmerah/PolarionMcp/issues"
+
+[project.scripts]
+mcp-polarion = "mcp_server:main"
+mcp-polarion-http = "mcp_server.http_server:main"
+
 [tool.setuptools]
-packages = ["mcp_server", "lib", "lib.polarion"]
+packages = ["mcp_server", "lib"]
 
 [project.optional-dependencies]
 dev = [
@@ -39,6 +50,11 @@ dev = [
     "pre-commit>=3.4.0",
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
+    "pytest-asyncio>=1.0.0",
+]
+http = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
 ]
 
 [tool.black]
@@ -92,6 +108,7 @@ addopts = "-ra -q --cov=lib --cov-report=term-missing --cov-report=html"
 testpaths = [
     "tests",
 ]
+asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["lib"]

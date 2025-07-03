@@ -1,7 +1,5 @@
 """Tests for the Polarion driver core functionality."""
 
-import os
-
 import pytest
 
 from lib.polarion.polarion_driver import PolarionDriver
