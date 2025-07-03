@@ -15,12 +15,24 @@ pip install mcp-polarion
 
 ### Environment Variables
 
-Create a `.env` file:
+The MCP server requires three environment variables for Polarion authentication. You have two options:
+
+#### Option 1: Using .env file (Recommended)
+Create a `.env` file in your working directory:
 
 ```env
 POLARION_URL=https://your-polarion-instance.com/polarion
 POLARION_USER=your-username
 POLARION_TOKEN=your-access-token
+```
+
+#### Option 2: System Environment Variables
+Set environment variables directly:
+
+```bash
+export POLARION_URL=https://your-polarion-instance.com/polarion
+export POLARION_USER=your-username
+export POLARION_TOKEN=your-access-token
 ```
 
 ### Configure for Claude
@@ -32,7 +44,25 @@ POLARION_TOKEN=your-access-token
 {
   "mcpServers": {
     "polarion": {
-      "command": "mcp-polarion"
+      "command": "mcp-polarion",
+      "env": {
+        "POLARION_URL": "https://your-polarion-instance.com/polarion",
+        "POLARION_USER": "your-username",
+        "POLARION_TOKEN": "your-access-token"
+      }
+    }
+  }
+}
+```
+
+Or if using a `.env` file, specify the working directory:
+
+```json
+{
+  "mcpServers": {
+    "polarion": {
+      "command": "mcp-polarion",
+      "cwd": "/path/to/directory/with/env/file"
     }
   }
 }
@@ -50,7 +80,27 @@ POLARION_TOKEN=your-access-token
   "mcp": {
     "servers": {
       "polarion": {
-        "command": "mcp-polarion"
+        "command": "mcp-polarion",
+        "env": {
+          "POLARION_URL": "https://your-polarion-instance.com/polarion",
+          "POLARION_USER": "your-username",
+          "POLARION_TOKEN": "your-access-token"
+        }
+      }
+    }
+  }
+}
+```
+
+Or if using a `.env` file, specify the working directory:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "polarion": {
+        "command": "mcp-polarion",
+        "cwd": "/path/to/directory/with/env/file"
       }
     }
   }
