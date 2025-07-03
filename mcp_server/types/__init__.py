@@ -1,40 +1,39 @@
 """Types package for MCP server."""
 
+from .exceptions import (
+    InvalidParametersException,
+    MCPException,
+    PolarionConnectionException,
+    ToolNotFoundException,
+)
 from .mcp_protocol import (
-    MCPMethod,
-    MCPErrorCode,
+    InitializeResult,
     MCPError,
+    MCPErrorCode,
+    MCPMethod,
     MCPRequest,
     MCPResponse,
     MCPSession,
-    InitializeResult,
-    ToolSchema,
     ToolDefinition,
+    ToolSchema,
     ToolsListResult,
 )
-
 from .tools import (
-    ToolName,
-    ToolContentItem,
-    ToolResponse,
-    ProjectInfoParams,
-    WorkItemParams,
-    SearchWorkItemsParams,
-    TestRunParams,
-    TestRunsParams,
+    DocumentResult,
     DocumentsParams,
     HealthCheckParams,
-    WorkItemResult,
-    TestRunResult,
-    DocumentResult,
     HealthCheckResult,
-)
-
-from .exceptions import (
-    MCPException,
-    ToolNotFoundException,
-    InvalidParametersException,
-    PolarionConnectionException,
+    ProjectInfoParams,
+    SearchWorkItemsParams,
+    TestRunParams,
+    TestRunResult,
+    TestRunsParams,
+    TestSpecsFromDocumentParams,
+    ToolContentItem,
+    ToolName,
+    ToolResponse,
+    WorkItemParams,
+    WorkItemResult,
 )
 
 __all__ = [
@@ -59,6 +58,7 @@ __all__ = [
     "TestRunParams",
     "TestRunsParams",
     "DocumentsParams",
+    "TestSpecsFromDocumentParams",
     "HealthCheckParams",
     "WorkItemResult",
     "TestRunResult",

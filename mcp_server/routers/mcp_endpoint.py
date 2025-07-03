@@ -6,34 +6,35 @@ Provides Microsoft Copilot compatible MCP server functionality.
 import json
 import logging
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
-from fastapi import APIRouter, HTTPException, Request, Response, Header
+from fastapi import APIRouter, Header, HTTPException, Request, Response
 
 from lib.polarion.polarion_driver import PolarionDriver
+
 from ..config import settings
 from ..types import (
-    MCPMethod,
-    MCPErrorCode,
+    DocumentResult,
+    HealthCheckResult,
+    InitializeResult,
+    InvalidParametersException,
     MCPError,
+    MCPErrorCode,
+    MCPException,
+    MCPMethod,
     MCPRequest,
     MCPResponse,
     MCPSession,
-    InitializeResult,
-    ToolSchema,
-    ToolDefinition,
-    ToolsListResult,
-    ToolName,
-    ToolContentItem,
-    ToolResponse,
-    WorkItemResult,
-    TestRunResult,
-    DocumentResult,
-    HealthCheckResult,
-    MCPException,
-    ToolNotFoundException,
-    InvalidParametersException,
     PolarionConnectionException,
+    TestRunResult,
+    ToolContentItem,
+    ToolDefinition,
+    ToolName,
+    ToolNotFoundException,
+    ToolResponse,
+    ToolSchema,
+    ToolsListResult,
+    WorkItemResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,27 @@ router = APIRouter(prefix="/mcp", tags=["MCP"])
 mcp_sessions: Dict[str, MCPSession] = {}
 
 
+def safe_get_value(obj: Any, attr: str, default: str = "") -> str:
+    """Safely extract a value from a Polarion object, handling nested attributes."""
+    try:
+        value = getattr(obj, attr, default)
+        if value is None:
+            return default
+
+        # If it's a complex object with 'id' attribute, get the id
+        if hasattr(value, "id"):
+            return str(value.id)
+
+        # If it's a complex object with 'content' attribute (like description), get the content
+        if hasattr(value, "content"):
+            return str(value.content)
+
+        # Otherwise, just convert to string
+        return str(value)
+    except Exception:
+        return default
+
+
 class PolarionConnection:
     """Context manager for Polarion connections"""
 
@@ -53,25 +75,33 @@ class PolarionConnection:
         self.driver = None
 
     def __enter__(self):
-        self.driver = PolarionDriver(settings.POLARION_URL)
+        self.driver = PolarionDriver(
+            settings.POLARION_URL, settings.POLARION_USER, settings.POLARION_TOKEN
+        )
         connection = self.driver.__enter__()
         if self.project_id:
             connection.select_project(self.project_id)
         return connection
 
-    def __exit__(self, exc_type: Optional[type], exc_val: Optional[BaseException], exc_tb: Optional[Any]) -> None:
+    def __exit__(
+        self,
+        exc_type: Optional[type],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[Any],
+    ) -> None:
         if self.driver:
             self.driver.__exit__(exc_type, exc_val, exc_tb)
 
 
 def create_error_response(
-    request_id: Optional[str], code: MCPErrorCode, message: str
+    request_id: Optional[Union[str, int]], code: MCPErrorCode, message: str
 ) -> MCPResponse:
     """Create an MCP error response"""
     return MCPResponse(id=request_id, error=MCPError(code=code, message=message))
 
+
 def create_success_response(
-    request_id: Optional[str], result: Dict[str, Any]
+    request_id: Optional[Union[str, int]], result: Dict[str, Any]
 ) -> MCPResponse:
     """Create an MCP success response"""
     return MCPResponse(id=request_id, result=result)
@@ -192,6 +222,24 @@ async def handle_tools_list(params: Optional[Dict[str, Any]]) -> Dict[str, Any]:
             ),
         ),
         ToolDefinition(
+            name=ToolName.GET_TEST_SPECS_FROM_DOCUMENT,
+            description="Get test specifications from a specific document in a Polarion project",
+            inputSchema=ToolSchema(
+                type="object",
+                properties={
+                    "project_id": {
+                        "type": "string",
+                        "description": "The ID of the Polarion project",
+                    },
+                    "document_id": {
+                        "type": "string",
+                        "description": "The ID of the document to get test specs from",
+                    },
+                },
+                required=["project_id", "document_id"],
+            ),
+        ),
+        ToolDefinition(
             name=ToolName.HEALTH_CHECK,
             description="Check the health of the Polarion connection",
             inputSchema=ToolSchema(
@@ -211,8 +259,12 @@ async def handle_tool_call(tool_name: str, arguments: Dict[str, Any]) -> ToolRes
     try:
         if tool_name == ToolName.HEALTH_CHECK:
             try:
-                # Test if we can instantiate PolarionDriver (validates env vars)
-                PolarionDriver(settings.POLARION_URL)
+                # Test if we can instantiate PolarionDriver (validates parameters)
+                PolarionDriver(
+                    settings.POLARION_URL,
+                    settings.POLARION_USER,
+                    settings.POLARION_TOKEN,
+                )
                 health_result = HealthCheckResult(
                     status="healthy",
                     polarion_url=settings.POLARION_URL,
@@ -261,13 +313,13 @@ async def handle_tool_call(tool_name: str, arguments: Dict[str, Any]) -> ToolRes
 
                 result = {
                     "id": workitem.id,
-                    "title": getattr(workitem, "title", ""),
-                    "description": getattr(workitem, "description", ""),
-                    "type": getattr(workitem, "type", ""),
-                    "status": getattr(workitem, "status", ""),
-                    "author": getattr(workitem, "author", ""),
-                    "created": str(getattr(workitem, "created", "")),
-                    "updated": str(getattr(workitem, "updated", "")),
+                    "title": safe_get_value(workitem, "title"),
+                    "description": safe_get_value(workitem, "description"),
+                    "type": safe_get_value(workitem, "type"),
+                    "status": safe_get_value(workitem, "status"),
+                    "author": safe_get_value(workitem, "author"),
+                    "created": safe_get_value(workitem, "created"),
+                    "updated": safe_get_value(workitem, "updated"),
                 }
 
             elif tool_name == "search_workitems":
@@ -276,7 +328,50 @@ async def handle_tool_call(tool_name: str, arguments: Dict[str, Any]) -> ToolRes
                 if not query:
                     raise ValueError("query is required")
 
-                result = conn.search_workitems(query, field_list)
+                workitems = conn.search_workitems(query, field_list)
+                result = []
+
+                for wi in workitems:
+                    # Handle both dict-like results and WorkItem objects
+                    if hasattr(wi, "__dict__"):  # It's a WorkItem object
+                        item = {
+                            "id": wi.id,
+                            "title": safe_get_value(wi, "title"),
+                            "type": safe_get_value(wi, "type"),
+                            "status": safe_get_value(wi, "status"),
+                            "description": safe_get_value(wi, "description"),
+                            "author": safe_get_value(wi, "author"),
+                            "created": safe_get_value(wi, "created"),
+                            "updated": safe_get_value(wi, "updated"),
+                        }
+                    else:  # It's already a dict
+                        item = {
+                            "id": wi.get("id", ""),
+                            "title": wi.get("title", ""),
+                            "type": (
+                                wi.get("type", {}).get("id", "")
+                                if isinstance(wi.get("type"), dict)
+                                else wi.get("type", "")
+                            ),
+                            "status": (
+                                wi.get("status", {}).get("id", "")
+                                if isinstance(wi.get("status"), dict)
+                                else wi.get("status", "")
+                            ),
+                            "description": (
+                                wi.get("description", {}).get("content", "")
+                                if isinstance(wi.get("description"), dict)
+                                else wi.get("description", "")
+                            ),
+                            "author": (
+                                wi.get("author", {}).get("id", "")
+                                if isinstance(wi.get("author"), dict)
+                                else wi.get("author", "")
+                            ),
+                            "created": str(wi.get("created", "")),
+                            "updated": str(wi.get("updated", "")),
+                        }
+                    result.append(item)
 
             elif tool_name == "get_test_runs":
                 test_runs = conn.get_test_runs()
@@ -285,10 +380,10 @@ async def handle_tool_call(tool_name: str, arguments: Dict[str, Any]) -> ToolRes
                     result.append(
                         {
                             "id": tr.id,
-                            "title": getattr(tr, "title", ""),
-                            "status": getattr(tr, "status", ""),
-                            "created": str(getattr(tr, "created", "")),
-                            "updated": str(getattr(tr, "updated", "")),
+                            "title": safe_get_value(tr, "title"),
+                            "status": safe_get_value(tr, "status"),
+                            "created": safe_get_value(tr, "created"),
+                            "updated": safe_get_value(tr, "updated"),
                         }
                     )
 
@@ -303,11 +398,11 @@ async def handle_tool_call(tool_name: str, arguments: Dict[str, Any]) -> ToolRes
 
                 result = {
                     "id": test_run.id,
-                    "title": getattr(test_run, "title", ""),
-                    "status": getattr(test_run, "status", ""),
-                    "created": str(getattr(test_run, "created", "")),
-                    "updated": str(getattr(test_run, "updated", "")),
-                    "description": getattr(test_run, "description", ""),
+                    "title": safe_get_value(test_run, "title"),
+                    "status": safe_get_value(test_run, "status"),
+                    "created": safe_get_value(test_run, "created"),
+                    "updated": safe_get_value(test_run, "updated"),
+                    "description": safe_get_value(test_run, "description"),
                 }
 
             elif tool_name == "get_documents":
@@ -317,12 +412,33 @@ async def handle_tool_call(tool_name: str, arguments: Dict[str, Any]) -> ToolRes
                     result.append(
                         {
                             "id": doc.id,
-                            "title": getattr(doc, "title", ""),
-                            "type": getattr(doc, "type", {}).get("id", ""),
-                            "created": str(getattr(doc, "created", "")),
-                            "updated": str(getattr(doc, "updated", "")),
+                            "title": safe_get_value(doc, "title"),
+                            "type": safe_get_value(doc, "type"),
+                            "created": safe_get_value(doc, "created"),
+                            "updated": safe_get_value(doc, "updated"),
                         }
                     )
+
+            elif tool_name == "get_test_specs_from_document":
+                document_id = arguments.get("document_id")
+                if not document_id:
+                    raise ValueError("document_id is required")
+
+                # Get the document
+                document = conn.get_test_specs_doc(document_id)
+                if not document:
+                    raise ValueError(f"Document {document_id} not found")
+
+                # Get test spec IDs from the document
+                test_spec_ids = conn.test_spec_ids_in_doc(document)
+
+                result = {
+                    "document_id": document_id,
+                    "document_title": safe_get_value(document, "title"),
+                    "test_spec_ids": list(test_spec_ids),
+                    "total_test_specs": len(test_spec_ids),
+                }
+
             else:
                 raise ValueError(f"Unknown tool: {tool_name}")
 
@@ -366,6 +482,11 @@ async def handle_mcp_request(request: MCPRequest) -> MCPResponse:
             result = await handle_initialize(request.params)
             return create_success_response(request.id, result)
 
+        elif request.method == "notifications/initialized":
+            # This is a notification from client that it's initialized
+            # We just acknowledge it
+            return create_success_response(request.id, {})
+
         elif request.method == "tools/list":
             result = await handle_tools_list(request.params)
             return create_success_response(request.id, result)
@@ -382,6 +503,19 @@ async def handle_mcp_request(request: MCPRequest) -> MCPResponse:
 
             tool_response = await handle_tool_call(tool_name, arguments)
             return create_success_response(request.id, tool_response.model_dump())
+
+        elif request.method == "resources/list":
+            # We don't implement resources yet, return empty list
+            return create_success_response(request.id, {"resources": []})
+
+        elif request.method == "resources/templates/list":
+            # We don't implement resource templates yet, return empty list
+            return create_success_response(request.id, {"resourceTemplates": []})
+
+        elif request.method == "notifications/cancelled":
+            # This is a notification that operation was cancelled
+            # We just acknowledge it
+            return create_success_response(request.id, {})
 
         else:
             return create_error_response(
@@ -410,11 +544,28 @@ async def mcp_streamable_endpoint(
 
         try:
             request_data = json.loads(body)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON")
+        except json.JSONDecodeError as e:
+            # Return JSON-RPC error for invalid JSON
+            error_response = create_error_response(
+                None, -32700, f"Parse error: {str(e)}"
+            )
+            return Response(
+                content=error_response.model_dump_json(),
+                media_type="application/json",
+            )
 
-        # Create MCP request object
-        mcp_request = MCPRequest(**request_data)
+        # Create MCP request object with proper error handling
+        try:
+            mcp_request = MCPRequest(**request_data)
+        except Exception as e:
+            # Return JSON-RPC error for invalid request format
+            error_response = create_error_response(
+                request_data.get("id"), -32600, f"Invalid request: {str(e)}"
+            )
+            return Response(
+                content=error_response.model_dump_json(),
+                media_type="application/json",
+            )
 
         # Generate session ID if this is an initialize request
         session_id = mcp_session_id
@@ -449,11 +600,14 @@ async def mcp_streamable_endpoint(
 
 
 @router.get("/schema")
-async def get_mcp_openapi_schema():
+async def get_mcp_openapi_schema(request: Request):
     """
     Get OpenAPI schema for Microsoft Copilot integration.
     Returns the schema in the format required by Microsoft Copilot Studio.
     """
+    # Dynamically determine the host from the request
+    host = request.headers.get("host", f"{settings.SERVER_HOST}:{settings.SERVER_PORT}")
+
     schema = {
         "swagger": "2.0",
         "info": {
@@ -461,7 +615,7 @@ async def get_mcp_openapi_schema():
             "description": "Model Context Protocol server for Polarion integration with Microsoft Copilot",
             "version": "1.0.0",
         },
-        "host": "your-server-hostname.com",  # This should be configured
+        "host": host,
         "basePath": "/",
         "schemes": ["https"],
         "paths": {

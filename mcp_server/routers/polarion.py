@@ -40,7 +40,9 @@ def get_workitem_by_id(
     to be set in the environment for the driver to connect.
     """
     try:
-        with PolarionDriver(settings.POLARION_URL) as polarion:
+        with PolarionDriver(
+            settings.POLARION_URL, settings.POLARION_USER, settings.POLARION_TOKEN
+        ) as polarion:
             polarion.select_project(project_id)
             # The python-polarion library's getWorkitem can be slow if it has to search.
             # We assume the project is already selected.
@@ -71,6 +73,9 @@ def get_workitem_by_id(
             )
             return response
 
+    except HTTPException:
+        # Re-raise HTTPExceptions as-is (like 404 for not found items)
+        raise
     except ValueError as e:
         # Catches errors from PolarionDriver like missing env vars
         raise HTTPException(status_code=500, detail=str(e))
@@ -89,13 +94,15 @@ def get_workitem_by_id(
 def get_project_info(
     project_id: Annotated[
         str, Path(example="MyProject", description="The Polarion Project ID.")
-    ]
+    ],
 ) -> models.ProjectResponse:
     """
     Get information about a specific Polarion project.
     """
     try:
-        with PolarionDriver(settings.POLARION_URL) as polarion:
+        with PolarionDriver(
+            settings.POLARION_URL, settings.POLARION_USER, settings.POLARION_TOKEN
+        ) as polarion:
             polarion.select_project(project_id)
             project_info = polarion.get_project_info()
             return models.ProjectResponse(**project_info)
@@ -133,7 +140,9 @@ def search_workitems(
     Search for work items in a Polarion project using a query string.
     """
     try:
-        with PolarionDriver(settings.POLARION_URL) as polarion:
+        with PolarionDriver(
+            settings.POLARION_URL, settings.POLARION_USER, settings.POLARION_TOKEN
+        ) as polarion:
             polarion.select_project(project_id)
             workitems = polarion.search_workitems(query, field_list=fields)
 
@@ -181,13 +190,15 @@ def search_workitems(
 def get_test_runs(
     project_id: Annotated[
         str, Path(example="MyProject", description="The Polarion Project ID.")
-    ]
+    ],
 ) -> List[models.TestRunResponse]:
     """
     Get all test runs in a Polarion project.
     """
     try:
-        with PolarionDriver(settings.POLARION_URL) as polarion:
+        with PolarionDriver(
+            settings.POLARION_URL, settings.POLARION_USER, settings.POLARION_TOKEN
+        ) as polarion:
             polarion.select_project(project_id)
             test_runs = polarion.get_test_runs()
 
@@ -231,7 +242,9 @@ def get_test_run(
     Get a specific test run by ID.
     """
     try:
-        with PolarionDriver(settings.POLARION_URL) as polarion:
+        with PolarionDriver(
+            settings.POLARION_URL, settings.POLARION_USER, settings.POLARION_TOKEN
+        ) as polarion:
             polarion.select_project(project_id)
             test_run = polarion.get_test_run(testrun_id)
 
@@ -273,13 +286,15 @@ def get_test_run(
 def get_documents(
     project_id: Annotated[
         str, Path(example="MyProject", description="The Polarion Project ID.")
-    ]
+    ],
 ) -> List[models.DocumentResponse]:
     """
     Get all documents in a Polarion project.
     """
     try:
-        with PolarionDriver(settings.POLARION_URL) as polarion:
+        with PolarionDriver(
+            settings.POLARION_URL, settings.POLARION_USER, settings.POLARION_TOKEN
+        ) as polarion:
             polarion.select_project(project_id)
             documents = polarion.get_documents()
 
@@ -327,7 +342,9 @@ def get_document(
     Get a specific document by ID.
     """
     try:
-        with PolarionDriver(settings.POLARION_URL) as polarion:
+        with PolarionDriver(
+            settings.POLARION_URL, settings.POLARION_USER, settings.POLARION_TOKEN
+        ) as polarion:
             polarion.select_project(project_id)
             document = polarion.get_test_specs_doc(document_id)
 

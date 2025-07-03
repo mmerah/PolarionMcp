@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 
 from lib.polarion.polarion_driver import PolarionDriver
 
-from .routers import polarion, mcp_endpoint
+from .routers import mcp_endpoint, polarion
 
 app = FastAPI(
     title="MCP Server for Polarion",
@@ -19,7 +19,7 @@ app = FastAPI(
         {"name": "MCP", "description": "Model Context Protocol endpoints"},
         {"name": "Polarion", "description": "Direct Polarion API endpoints"},
         {"name": "Health", "description": "Health and status endpoints"},
-    ]
+    ],
 )
 
 app.include_router(polarion.router)
@@ -43,7 +43,9 @@ def health_check() -> Dict[str, str]:
         # Test if we can instantiate the PolarionDriver (checks env vars)
         from .config import settings
 
-        PolarionDriver(settings.POLARION_URL)
+        PolarionDriver(
+            settings.POLARION_URL, settings.POLARION_USER, settings.POLARION_TOKEN
+        )
         return {"status": "healthy", "polarion_config": "valid"}
     except ValueError as e:
         raise HTTPException(status_code=503, detail=f"Service unavailable: {str(e)}")
