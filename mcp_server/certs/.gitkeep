@@ -1,0 +1,2 @@
+# This file is to ensure the certs directory is added to git.
+# The actual certificate files should be in .gitignore.
