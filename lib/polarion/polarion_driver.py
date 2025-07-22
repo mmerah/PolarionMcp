@@ -2,13 +2,12 @@
 Polarion driver class - A robust, read-only client for accessing Polarion data.
 """
 
-import logging
-import re
-from typing import Any, Dict, List, Optional, Set
-
 # The atexit unregistering is a specific design choice to control session
 # cleanup manually within the context manager.
 import atexit
+import logging
+import re
+from typing import Any, Dict, List, Optional, Set
 
 from polarion.document import Document
 from polarion.plan import Plan
@@ -20,6 +19,7 @@ from polarion.workitem import Workitem
 
 class PolarionConnectionException(Exception):
     """Exception raised for issues related to the Polarion connection or API calls."""
+
     pass
 
 
@@ -59,10 +59,14 @@ class PolarionDriver:
     def __enter__(self) -> "PolarionDriver":
         """Establishes the connection to the Polarion server."""
         if self._polarion:
-            raise PolarionConnectionException("A Polarion connection is already active. This driver does not support nested connections.")
+            raise PolarionConnectionException(
+                "A Polarion connection is already active. This driver does not support nested connections."
+            )
 
         try:
-            self.log.info(f"Connecting to Polarion at {self._url} with user '{self._user}'.")
+            self.log.info(
+                f"Connecting to Polarion at {self._url} with user '{self._user}'."
+            )
             self._polarion = Polarion(
                 polarion_url=self._url, user=self._user, token=self._token
             )
@@ -73,11 +77,17 @@ class PolarionDriver:
         except Exception as err:
             # Intercept known error messages for more user-friendly exceptions.
             if "Cannot login because WSDL has no SessionWebService" in str(err):
-                raise PolarionConnectionException(f"Invalid Polarion URL or the server is unreachable: {self._url}")
+                raise PolarionConnectionException(
+                    f"Invalid Polarion URL or the server is unreachable: {self._url}"
+                )
             elif f"Could not log in to Polarion for user {self._user}" in str(err):
-                raise PolarionConnectionException(f"Invalid credentials for user '{self._user}'. Please check your token.")
+                raise PolarionConnectionException(
+                    f"Invalid credentials for user '{self._user}'. Please check your token."
+                )
             else:
-                raise PolarionConnectionException(f"Failed to connect to Polarion: {err}") from err
+                raise PolarionConnectionException(
+                    f"Failed to connect to Polarion: {err}"
+                ) from err
 
         return self
 
@@ -100,13 +110,17 @@ class PolarionDriver:
             PolarionConnectionException: If the project is not found or if there is no active connection.
         """
         if not self._polarion:
-            raise PolarionConnectionException("No active connection to Polarion. Cannot select a project.")
+            raise PolarionConnectionException(
+                "No active connection to Polarion. Cannot select a project."
+            )
         try:
             self.log.info(f"Selecting project '{project_id}'.")
             self._project = self._polarion.getProject(project_id)
             self.log.info(f"Successfully selected project '{self._project.name}'.")
         except Exception as e:
-            raise PolarionConnectionException(f"Failed to select project '{project_id}': {e}") from e
+            raise PolarionConnectionException(
+                f"Failed to select project '{project_id}': {e}"
+            ) from e
 
     def get_project_info(self) -> Dict[str, str]:
         """
@@ -116,7 +130,9 @@ class PolarionDriver:
             A dictionary containing project details like id, name, and description.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
         return {
             "id": self._project.id,
             "name": self._project.name,
@@ -134,17 +150,21 @@ class PolarionDriver:
 
         Returns:
             The Document object if found, otherwise None.
-        
+
         Raises:
             PolarionConnectionException: If no project is selected.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
         try:
             return self._project.getDocument(doc_location)
         except Exception:
             # The underlying library raises a generic exception if not found.
-            self.log.warning(f"Document at location '{doc_location}' not found in project '{self._project.id}'.")
+            self.log.warning(
+                f"Document at location '{doc_location}' not found in project '{self._project.id}'."
+            )
             return None
 
     def get_documents(self) -> List[Document]:
@@ -155,20 +175,24 @@ class PolarionDriver:
 
         Returns:
             A list of all Document objects in the project.
-        
+
         Raises:
             PolarionConnectionException: If no project is selected.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
-        
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
+
         documents: List[Document] = []
         try:
             doc_spaces = self._project.getDocumentSpaces()
             for doc_space in doc_spaces:
                 documents.extend(self._project.getDocumentsInSpace(doc_space))
         except Exception as e:
-            raise PolarionConnectionException(f"Failed to retrieve documents: {e}") from e
+            raise PolarionConnectionException(
+                f"Failed to retrieve documents: {e}"
+            ) from e
         return documents
 
     def test_spec_ids_in_doc(self, test_specs_doc: Document) -> Set[str]:
@@ -182,20 +206,24 @@ class PolarionDriver:
 
         Returns:
             A set of work item IDs (e.g., {"PROJ-123", "PROJ-124"}).
-        
+
         Raises:
             PolarionConnectionException: If the search query fails.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
-        
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
+
         # Using a targeted query is much more efficient than client-side filtering.
         query = f'document.id:"{test_specs_doc.id}" AND type:testcase'
         try:
             workitems = self._project.searchWorkitem(query=query, field_list=["id"])
             return {wi["id"] for wi in workitems}
         except Exception as e:
-            raise PolarionConnectionException(f"Failed to search for test specifications in document '{test_specs_doc.id}': {e}") from e
+            raise PolarionConnectionException(
+                f"Failed to search for test specifications in document '{test_specs_doc.id}': {e}"
+            ) from e
 
     def get_workitem(self, workitem_id: str) -> Workitem:
         """
@@ -211,11 +239,15 @@ class PolarionDriver:
             PolarionConnectionException: If the work item is not found or the request fails.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
         try:
             return self._project.getWorkitem(workitem_id)
         except Exception as e:
-            raise PolarionConnectionException(f"Failed to get work item '{workitem_id}': {e}") from e
+            raise PolarionConnectionException(
+                f"Failed to get work item '{workitem_id}': {e}"
+            ) from e
 
     def get_workitem_by_uri(self, uri: str) -> Workitem:
         """
@@ -231,14 +263,20 @@ class PolarionDriver:
             PolarionConnectionException: If the work item is not found or the request fails.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
         try:
             # The Workitem constructor can resolve from a URI directly.
             return Workitem(self._polarion, self._project, uri=uri)
         except Exception as e:
-            raise PolarionConnectionException(f"Failed to get work item by URI '{uri}': {e}") from e
+            raise PolarionConnectionException(
+                f"Failed to get work item by URI '{uri}': {e}"
+            ) from e
 
-    def search_workitems(self, query: str, field_list: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    def search_workitems(
+        self, query: str, field_list: Optional[List[str]] = None
+    ) -> List[Dict[str, Any]]:
         """
         Searches for work items using a Polarion Lucene query.
 
@@ -248,16 +286,20 @@ class PolarionDriver:
 
         Returns:
             A list of dictionaries, where each dictionary represents a work item.
-        
+
         Raises:
             PolarionConnectionException: If the search query fails.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
         try:
             return self._project.searchWorkitem(query=query, field_list=field_list)
         except Exception as e:
-            raise PolarionConnectionException(f"Failed to search work items with query '{query}': {e}") from e
+            raise PolarionConnectionException(
+                f"Failed to search work items with query '{query}': {e}"
+            ) from e
 
     def get_test_run(self, test_run_id: str) -> Testrun:
         """
@@ -273,11 +315,15 @@ class PolarionDriver:
             PolarionConnectionException: If the test run is not found or the request fails.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
         try:
             return self._project.getTestRun(test_run_id)
         except Exception as e:
-            raise PolarionConnectionException(f"Failed to get test run '{test_run_id}': {e}") from e
+            raise PolarionConnectionException(
+                f"Failed to get test run '{test_run_id}': {e}"
+            ) from e
 
     def get_test_runs(self, query: str = "") -> List[Testrun]:
         """
@@ -288,17 +334,21 @@ class PolarionDriver:
 
         Returns:
             A list of Testrun objects.
-        
+
         Raises:
             PolarionConnectionException: If the search fails.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
         try:
             result = self._project.searchTestRuns(query=query)
             return result if result else []
         except Exception as e:
-            raise PolarionConnectionException(f"Failed to get test runs with query '{query}': {e}") from e
+            raise PolarionConnectionException(
+                f"Failed to get test runs with query '{query}': {e}"
+            ) from e
 
     def get_plan(self, plan_id: str) -> Plan:
         """
@@ -314,11 +364,15 @@ class PolarionDriver:
             PolarionConnectionException: If the plan is not found or the request fails.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
         try:
             return self._project.getPlan(plan_id)
         except Exception as e:
-            raise PolarionConnectionException(f"Failed to get plan '{plan_id}': {e}") from e
+            raise PolarionConnectionException(
+                f"Failed to get plan '{plan_id}': {e}"
+            ) from e
 
     def search_plans(self, query: str = "") -> List[Plan]:
         """
@@ -329,16 +383,20 @@ class PolarionDriver:
 
         Returns:
             A list of Plan objects matching the query.
-        
+
         Raises:
             PolarionConnectionException: If the search fails.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
         try:
             return self._project.searchPlanFullItem(query=query)
         except Exception as e:
-            raise PolarionConnectionException(f"Failed to search for plans with query '{query}': {e}") from e
+            raise PolarionConnectionException(
+                f"Failed to search for plans with query '{query}': {e}"
+            ) from e
 
     def get_user(self, user_id_or_name: str) -> Optional[User]:
         """
@@ -349,16 +407,20 @@ class PolarionDriver:
 
         Returns:
             The User object if found, otherwise None.
-        
+
         Raises:
             PolarionConnectionException: If the request fails.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
         try:
             return self._project.findUser(user_id_or_name)
         except Exception as e:
-            raise PolarionConnectionException(f"Failed to find user '{user_id_or_name}': {e}") from e
+            raise PolarionConnectionException(
+                f"Failed to find user '{user_id_or_name}': {e}"
+            ) from e
 
     def get_users(self) -> List[User]:
         """
@@ -366,16 +428,20 @@ class PolarionDriver:
 
         Returns:
             A list of User objects.
-        
+
         Raises:
             PolarionConnectionException: If the request fails.
         """
         if not self._project:
-            raise PolarionConnectionException("No project selected. Use .select_project() first.")
+            raise PolarionConnectionException(
+                "No project selected. Use .select_project() first."
+            )
         try:
             return self._project.getUsers()
         except Exception as e:
-            raise PolarionConnectionException(f"Failed to get users for project '{self._project.id}': {e}") from e
+            raise PolarionConnectionException(
+                f"Failed to get users for project '{self._project.id}': {e}"
+            ) from e
 
     @staticmethod
     def workitem_id_from_uri(uri: str) -> Optional[str]:

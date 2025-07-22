@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://json.schemastore.org/swagger-2.0.json
+swagger: "2.0"
+info:
+  title: Polarion MCP Server
+  description: Model Context Protocol server for Polarion ALM integration
+  version: "1.0.0"
+host: mbbgk00z-8000.euw.devtunnels.ms
+basePath: /
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - text/event-stream
+  - application/json
+paths:
+  /mcp/:
+    post:
+      summary: Polarion ALM Integration
+      description: Connect to Polarion ALM to query projects, work items, test runs, documents, and perform searches using natural language
+      operationId: mcpStreamable
+      x-ms-agentic-protocol: mcp-streamable-1.0
+      parameters: []
+      responses:
+        200:
+          description: Successful MCP response
+          schema:
+            type: object
+        400:
+          description: Bad request
+        500:
+          description: Internal server error

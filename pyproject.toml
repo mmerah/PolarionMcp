@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-polarion"
-version = "0.1.0"
-description = "A Model Context Protocol server for providing read-only access to Polarion ALM."
+version = "0.2.0"
+description = "A FastMCP-based server for Polarion, fully compatible with Microsoft Copilot Studio."
 readme = "README.md"
-license = "MIT"
+license = { text = "MIT" }
 authors = [
     {name = "Mounir Merah", email="mounir.mohammedimerah@gmail.com"},
 ]
-keywords = ["polarion", "mcp", "llm", "automation", "testing"]
+keywords = ["polarion", "mcp", "llm", "copilot-studio", "fastmcp"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -23,11 +23,12 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
     "polarion>=1.0.0",
-    "mcp>=1.2.0",
     "python-dotenv>=1.0.0",
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
+    "fastmcp==2.10.6"
 ]
 
 [project.urls]
@@ -35,8 +36,7 @@ dependencies = [
 "Bug Tracker" = "https://github.com/mmerah/PolarionMcp/issues"
 
 [project.scripts]
-mcp-polarion = "mcp_server:main"
-mcp-polarion-http = "mcp_server.http_server:main"
+mcp-polarion = "mcp_server.main:main"
 
 [tool.setuptools]
 packages = ["mcp_server", "lib"]
@@ -47,86 +47,25 @@ dev = [
     "isort>=5.12.0",
     "flake8>=6.1.0",
     "mypy>=1.5.0",
-    "pre-commit>=3.4.0",
     "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
     "pytest-asyncio>=1.0.0",
-]
-http = [
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.24.0",
 ]
 
 [tool.black]
 line-length = 88
-target-version = ['py39']
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
 
 [tool.isort]
 profile = "black"
-multi_line_output = 3
-line_length = 88
-known_first_party = ["lib"]
 
 [tool.mypy]
-python_version = "3.9"
-warn_return_any = false
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_no_return = true
-warn_unreachable = true
-strict_equality = true
-show_error_codes = true
+python_version = "3.10"
+explicit_package_bases = true
+mypy_path = "."
 
 [[tool.mypy.overrides]]
-module = "polarion.*"
+module = [
+    "polarion.*",
+    "uvicorn.*",
+    "fastmcp.*"
+]
 ignore_missing_imports = true
-
-[tool.pytest.ini_options]
-minversion = "7.0"
-addopts = "-ra -q --cov=lib --cov-report=term-missing --cov-report=html"
-testpaths = [
-    "tests",
-]
-asyncio_mode = "auto"
-
-[tool.coverage.run]
-source = ["lib"]
-omit = [
-    "*/tests/*",
-    "*/test_*",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "if self.debug:",
-    "if settings.DEBUG",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if 0:",
-    "if __name__ == .__main__.:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
-]
