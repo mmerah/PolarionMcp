@@ -1,311 +1,229 @@
-# Polarion MCP Server
+# Polarion MCP Server for Microsoft Copilot Studio
 
-A Model Context Protocol server for providing read-only access to Polarion ALM. This server enables LLMs to retrieve and analyze test data, work items, and project information from Polarion instances.
+A Model Context Protocol (MCP) server that provides seamless integration between Polarion ALM and Microsoft Copilot Studio. Built with FastMCP 2.10.6, this server enables AI agents to interact with Polarion projects, work items, test runs, documents, and more.
+
+## Features
+
+- **Full MCP Protocol Support**: Implements tools, resources, and prompts
+- **Microsoft Copilot Studio Compatible**: Includes middleware for JSON-RPC ID type compatibility
+- **9 Powerful Tools**: Comprehensive access to Polarion data
+- **Secure Authentication**: Token-based authentication with Polarion
+- **Production Ready**: Robust error handling and logging
+- **Modern Python**: Uses `pyproject.toml` and follows best practices
+
+## Prerequisites
+
+- Python 3.10+
+- Git
+- Access to a Polarion instance with:
+  - Polarion URL
+  - Username
+  - Personal access token
+- Microsoft Copilot Studio account (for AI agent integration)
 
 ## Installation
 
-### Using pip
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/mmerah/PolarionMcp.git
+   cd PolarionMcp
+   ```
 
-```bash
-pip install mcp-polarion
-```
+2. **Configure Polarion Credentials**
+   
+   Create a `.env` file in the project root:
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Edit `.env` with your credentials:
+   ```env
+   POLARION_URL=https://your-polarion-instance.com/polarion
+   POLARION_USER=your-username
+   POLARION_TOKEN=your-personal-access-token
+   ```
 
+3. **Run the Server**
+   
+   Using the convenience script (recommended):
+   ```bash
+   chmod +x run_server.sh
+   ./run_server.sh
+   ```
+   
+   Or manually:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   pip install -e .
+   python -m mcp_server.main
+   ```
 
-## Configuration
-
-### Environment Variables
-
-The MCP server requires three environment variables for Polarion authentication. You have two options:
-
-#### Option 1: Using .env file (Recommended)
-Create a `.env` file in your working directory:
-
-```env
-POLARION_URL=https://your-polarion-instance.com/polarion
-POLARION_USER=your-username
-POLARION_TOKEN=your-access-token
-```
-
-#### Option 2: System Environment Variables
-Set environment variables directly:
-
-```bash
-export POLARION_URL=https://your-polarion-instance.com/polarion
-export POLARION_USER=your-username
-export POLARION_TOKEN=your-access-token
-```
-
-### Configure for Claude
-
-<details>
-<summary>Using pip installation</summary>
-
-```json
-{
-  "mcpServers": {
-    "polarion": {
-      "command": "mcp-polarion",
-      "env": {
-        "POLARION_URL": "https://your-polarion-instance.com/polarion",
-        "POLARION_USER": "your-username",
-        "POLARION_TOKEN": "your-access-token"
-      }
-    }
-  }
-}
-```
-
-Or if using a `.env` file, specify the working directory:
-
-```json
-{
-  "mcpServers": {
-    "polarion": {
-      "command": "mcp-polarion",
-      "cwd": "/path/to/directory/with/env/file"
-    }
-  }
-}
-```
-</details>
-
-
-### Configure for VS Code
-
-<details>
-<summary>Using pip installation</summary>
-
-```json
-{
-  "mcp": {
-    "servers": {
-      "polarion": {
-        "command": "mcp-polarion",
-        "env": {
-          "POLARION_URL": "https://your-polarion-instance.com/polarion",
-          "POLARION_USER": "your-username",
-          "POLARION_TOKEN": "your-access-token"
-        }
-      }
-    }
-  }
-}
-```
-
-Or if using a `.env` file, specify the working directory:
-
-```json
-{
-  "mcp": {
-    "servers": {
-      "polarion": {
-        "command": "mcp-polarion",
-        "cwd": "/path/to/directory/with/env/file"
-      }
-    }
-  }
-}
-```
-</details>
-
-### Configure for Cline (Development)
-
-For development setup with local repository, you have two options:
-
-#### Option 1: Using Python module (Recommended)
-```json
-{
-  "mcpServers": {
-    "polarion": {
-      "command": "/path/to/your/PolarionMcp/.venv/bin/python",
-      "args": ["-m", "mcp_server"],
-      "cwd": "/path/to/your/PolarionMcp"
-    }
-  }
-}
-```
-
-#### Option 2: Using installed command (after `pip install -e .`)
-```json
-{
-  "mcpServers": {
-    "polarion": {
-      "command": "/path/to/your/PolarionMcp/.venv/bin/mcp-polarion",
-      "cwd": "/path/to/your/PolarionMcp"
-    }
-  }
-}
-```
+   The server starts on `http://0.0.0.0:8000` with the MCP endpoint at `/mcp/`
 
 ## Available Tools
 
-- `get_project_info` - Get information about a Polarion project
-  - `project_id` (string, required): The ID of the Polarion project
+### 1. `health_check`
+Checks the connection to the Polarion server.
+- **Returns**: Connection status message
 
-- `get_workitem` - Get a specific work item from a Polarion project  
-  - `project_id` (string, required): The ID of the Polarion project
-  - `workitem_id` (string, required): The ID of the work item to retrieve
+### 2. `get_project_info`
+Retrieves information about a Polarion project.
+- **Parameters**: 
+  - `project_id`: The ID of the Polarion project
+- **Returns**: Project name and description
 
-- `search_workitems` - Search for work items in a Polarion project using Lucene query syntax
-  - `project_id` (string, required): The ID of the Polarion project
-  - `query` (string, required): Lucene query string for searching work items
-  - `field_list` (array, optional): Optional list of fields to return
+### 3. `get_workitem`
+Gets detailed information about a specific work item.
+- **Parameters**:
+  - `project_id`: The ID of the Polarion project
+  - `workitem_id`: The ID of the work item (e.g., "PROJ-123")
+- **Returns**: Work item details including title, type, status, author, dates
 
-- `get_test_runs` - Get all test runs from a Polarion project
-  - `project_id` (string, required): The ID of the Polarion project
+### 4. `search_workitems`
+Searches for work items using Lucene query syntax.
+- **Parameters**:
+  - `project_id`: The ID of the Polarion project
+  - `query`: Lucene query string (e.g., "status:open AND type:requirement")
+  - `field_list`: Optional comma-separated list of fields to return
+- **Returns**: List of matching work items
 
-- `get_test_run` - Get a specific test run from a Polarion project
-  - `project_id` (string, required): The ID of the Polarion project
-  - `test_run_id` (string, required): The ID of the test run to retrieve
+### 5. `get_test_runs`
+Retrieves all test runs in a project.
+- **Parameters**:
+  - `project_id`: The ID of the Polarion project
+- **Returns**: List of test runs with ID, title, and status
 
-- `get_documents` - Get all documents from a Polarion project
-  - `project_id` (string, required): The ID of the Polarion project
+### 6. `get_test_run`
+Gets details of a specific test run.
+- **Parameters**:
+  - `project_id`: The ID of the Polarion project
+  - `test_run_id`: The ID of the test run
+- **Returns**: Test run details including status, dates, and test case count
 
-- `get_test_specs_from_document` - Get test specifications from a specific document in a Polarion project
-  - `project_id` (string, required): The ID of the Polarion project
-  - `document_id` (string, required): The ID of the document to get test specs from
+### 7. `get_documents`
+Lists all documents in a project.
+- **Parameters**:
+  - `project_id`: The ID of the Polarion project
+- **Returns**: List of documents with ID, title, and location
 
-- `health_check` - Check the health of the Polarion connection
+### 8. `get_test_specs_from_document`
+Extracts test specification IDs from a document.
+- **Parameters**:
+  - `project_id`: The ID of the Polarion project
+  - `document_id`: The ID of the document
+- **Returns**: List of test specification IDs found in the document
 
-- `discover_work_item_types` - Discover what work item types exist in a Polarion project by sampling work items
-  - `project_id` (string, required): The ID of the Polarion project
-  - `limit` (integer, optional): Maximum number of work items to sample (default: 20)
+### 9. `discover_work_item_types`
+Discovers available work item types in a project.
+- **Parameters**:
+  - `project_id`: The ID of the Polarion project
+  - `limit`: Maximum number of work items to sample (default: 20)
+- **Returns**: List of work item types with occurrence counts
 
-## Usage Examples
+## MCP Resources
 
-```
-"Get project information for MyProject"
-"Search for all requirements in MyProject"
-"Find test runs with status 'passed' in MyProject"
-"Get work item REQ-123 from MyProject"
-```
+- **`polarion://project/{project_id}`**: Access project information as a resource
 
-### Lucene Query Examples for Work Items
+## MCP Prompts
 
-```
-# Search by type
-"type:requirement"
-"type:testcase"
-
-# Search by status  
-"status:open"
-"status:closed"
-
-# Search by text
-"title:authentication"
-"description:*login*"
-
-# Combined searches
-"type:requirement AND status:open"
-"type:testcase AND title:*integration*"
-```
+- **`analyze_project`**: Generate analysis prompt for a project
+- **`workitem_analysis`**: Generate analysis prompt for a specific work item
 
 ## Microsoft Copilot Studio Integration
 
-This MCP server can be integrated with Microsoft Copilot Studio through a FastAPI HTTP wrapper, enabling your Copilot agents to access Polarion data via HTTP REST endpoints.
+### Public URL Configuration
 
-### Quick Setup
+For the server to be accessible by Microsoft Copilot Studio, you need a public URL:
 
-1. **Install HTTP server dependencies**:
-   ```bash
-   # Option 1: Install specific dependencies
-   pip install fastapi uvicorn[standard]
-   
-   # Option 2: Install with HTTP extras
-   pip install -e ".[http]"
-   ```
+- **Development**: Use VSCode port forwarding with Public visibility
+- **Production**: Deploy to a cloud service like Azure
 
-2. **Start HTTP Server**:
-   ```bash
-   # Development (HTTP)
-   python -m mcp_server.http_server
-   
-   # Or using the installed command
-   mcp-polarion-http
-   ```
+The server endpoint will be at: `https://your-public-url/mcp/`
 
-3. **HTTPS setup for development**:
-   ```bash
-   # Generate SSL certificates
-   ./scripts/generate_certs.sh
-   
-   # Start with HTTPS
-   python -m mcp_server.http_server --https --cert certs/cert.pem --key certs/key.pem
-   ```
+### Integration Steps
 
-4. **Generate OpenAPI specification**:
-   ```bash
-   python scripts/generate_openapi.py
-   ```
+1. **Ensure Server is Running**
+   The server must be accessible at the public URL above.
 
-### Available REST Endpoints
+2. **OpenAPI Specification**
+   The `openapi.yaml` file is pre-configured with:
+   - Correct host URL
+   - MCP protocol specification: `x-ms-agentic-protocol: mcp-streamable-1.0`
+   - Proper endpoint configuration
 
-- `POST /tools/health_check` - Check Polarion connection health
-- `POST /tools/get_project_info` - Get project information
-- `POST /tools/search_workitems` - Search work items
-- `POST /tools/get_test_runs` - Get test runs
-- `POST /tools/discover_work_item_types` - Discover work item types
-- `GET /openapi.json` - OpenAPI specification for Copilot Studio
+3. **Add to Copilot Studio**
+   For detailed instructions on adding MCP servers to Microsoft Copilot Studio, refer to the official Microsoft documentation:
+   https://github.com/microsoft/mcsmcp/blob/main/README.md
 
-### Microsoft Copilot Studio Configuration
+4. **Test Your Integration**
+   Example prompts for Copilot Studio:
+   - "Check the health of the Polarion connection"
+   - "Get information about the MyProject project"
+   - "Search for open defects in the WebApp project"
+   - "Show me test runs in the QA project"
+   - "Find all requirements assigned to john.doe in the Development project"
 
-1. **Import OpenAPI Specification**:
-   - Generate specification: `python scripts/generate_openapi.py`
-   - Use the generated `openapi.json` file
-   - Import as custom connector in Copilot Studio
-   - Set base URL to your HTTPS server endpoint
+## Project Structure
 
-2. **Required Settings**:
-   - **Authentication**: Configure as needed for your environment
-   - **HTTPS**: Microsoft Copilot Studio requires HTTPS endpoints
-   - **CORS**: Enabled by default in the HTTP server
-
-3. **Example Agent Prompts**:
-   ```
-   "Get project information for MyProject"
-   "Search for open requirements in MyProject"  
-   "Find all test runs with status failed"
-   "Discover what work item types exist in MyProject"
-   "Get work item REQ-123 details"
-   "List all documents in MyProject"
-   ```
+```
+PolarionMcp/
+├── mcp_server/          # MCP server implementation
+│   ├── __init__.py
+│   ├── main.py         # Server entry point
+│   ├── tools.py        # MCP tool definitions
+│   ├── middleware.py   # Copilot Studio compatibility layer
+│   └── settings.py     # Configuration management
+├── lib/                 # Core libraries
+│   └── polarion/
+│       └── polarion_driver.py  # Polarion API wrapper
+├── openapi.yaml        # OpenAPI specification for Copilot Studio
+├── run_server.sh       # Convenience startup script
+├── pyproject.toml      # Python package configuration
+├── .env.example        # Environment variables template
+└── README.md           # This file
+```
 
 ## Development
 
 ### Running Tests
-
-Install development dependencies and run tests:
-
 ```bash
-pip install -e ".[dev]"
 pytest
 ```
 
-## Security Notes
+### Code Formatting
+```bash
+black mcp_server lib
+isort mcp_server lib
+```
 
-- This server provides read-only access to Polarion data
-- Ensure your Polarion access token has minimal required permissions
-- Deploy in secure environments and networks
-- Review data exposure before deploying to production
-- Consider using environment-specific configuration
+### Type Checking
+```bash
+mypy mcp_server lib
+```
 
 ## Troubleshooting
 
 ### Connection Issues
+- Verify your Polarion URL is correct and accessible (notably use '/mcp/' and not '/mcp')
+- Ensure your personal access token has sufficient permissions
+- Check that the `.env` file is properly configured
 
-1. Verify your `POLARION_URL` is correct and accessible
-2. Check that your `POLARION_USER` and `POLARION_TOKEN` are valid
-3. Ensure your Polarion instance supports the required API endpoints
-4. Test connectivity using the `health_check` tool
+### Copilot Studio Integration
+- Confirm your public URL is accessible
+- Verify the server is running on port 8000
+- Check server logs for any middleware-related errors
+- Consult the official Microsoft MCP documentation: https://github.com/microsoft/mcsmcp
 
-### Test Run Queries
-
-The `get_test_runs` tool searches for work items with type `verificationTest`, which is the standard type for test cases/test runs in many Polarion instances. If your Polarion instance uses a different type name for test runs, you can:
-
-1. Use the `discover_work_item_types` tool to find all available types in your project
-2. Use the `search_workitems` tool with a custom query like `type:your-test-type`
-3. Contact your Polarion administrator for the appropriate type name
+### Common Errors
+- "Invalid credentials": Check your username and token
+- "Project not found": Verify the project ID exists in Polarion
+- "Work item not found": Ensure the work item ID includes the project prefix
 
 ## License
 
 This project is licensed under the MIT License. See the LICENSE file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.

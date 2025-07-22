@@ -7,13 +7,13 @@ from lib.polarion.polarion_driver import PolarionDriver
 
 def test_polarion_driver_missing_user() -> None:
     """Test that PolarionDriver fails fast when user is missing."""
-    with pytest.raises(ValueError, match="Polarion user name should not be None"):
+    with pytest.raises(ValueError, match="Polarion user name must be provided"):
         PolarionDriver("https://test.example.com", "", "test-token")
 
 
 def test_polarion_driver_missing_token() -> None:
     """Test that PolarionDriver fails fast when token is missing."""
-    with pytest.raises(ValueError, match="Polarion token should not be None"):
+    with pytest.raises(ValueError, match="Polarion token must be provided"):
         PolarionDriver("https://test.example.com", "test@example.com", "")
 
 
