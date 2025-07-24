@@ -1,6 +1,6 @@
-# Polarion MCP Server for Microsoft Copilot Studio
+# Polarion MCP Server
 
-A Model Context Protocol (MCP) server that provides seamless integration between Polarion ALM and Microsoft Copilot Studio. Built with FastMCP 2.10.6, this server enables AI agents to interact with Polarion projects, work items, test runs, documents, and more.
+A Model Context Protocol (MCP) server that provides seamless integration between Polarion ALM and AI assistants like Microsoft Copilot Studio and Cline. Built with FastMCP 2.10.6, this server enables AI agents to interact with Polarion projects, work items, test runs, documents, and more.
 
 ## Features
 
@@ -163,6 +163,44 @@ The server endpoint will be at: `https://your-public-url/mcp/`
    - "Search for open defects in the WebApp project"
    - "Show me test runs in the QA project"
    - "Find all requirements assigned to john.doe in the Development project"
+
+## Using with Cline
+
+This server can also be used with [Cline](https://github.com/cline/cline) (VSCode extension) by running it in SSE transport mode:
+
+1. **Run the Cline-compatible server**
+   ```bash
+   ./run_server_cline.sh
+   ```
+   This starts the server with SSE transport on `http://localhost:8000/mcp`
+
+2. **Configure Cline**
+   - Open VSCode with Cline extension
+   - Click Cline icon → Menu (⋮) → MCP Servers
+   - Go to "Remote Servers" tab
+   - Add server with:
+     - Name: `polarion`
+     - URL: `http://localhost:8000/mcp`
+   
+   Or edit `cline_mcp_settings.json`:
+   ```json
+   {
+       "mcpServers": {
+           "polarion": {
+               "url": "http://localhost:8000/mcp",
+               "disabled": false,
+               "autoApprove": ["health_check", "get_project_info"]
+           }
+       }
+   }
+   ```
+
+3. **Use with Cline**
+   - Ask Cline to interact with Polarion:
+     - "Check my Polarion connection"
+     - "Search for open bugs in project XYZ"
+     - "Get test run results from Polarion"
+     - "Show me all requirements in project ABC"
 
 ## Project Structure
 

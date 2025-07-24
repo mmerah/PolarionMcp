@@ -106,10 +106,16 @@ class TestTools:
         """Test search_workitems tool."""
         import mcp_server.tools
         
-        mock_driver.search_workitems.return_value = [
-            {"id": "TEST-123", "title": "Test Item 1"},
-            {"id": "TEST-124", "title": "Test Item 2"},
-        ]
+        # Create mock work items with attributes instead of dictionaries
+        mock_item1 = Mock(id="TEST-123", title="Test Item 1")
+        mock_item1.type = Mock(id="requirement")
+        mock_item1.status = Mock(id="open")
+        
+        mock_item2 = Mock(id="TEST-124", title="Test Item 2")
+        mock_item2.type = Mock(id="requirement")
+        mock_item2.status = Mock(id="closed")
+        
+        mock_driver.search_workitems.return_value = [mock_item1, mock_item2]
         
         with patch("mcp_server.tools.settings", mock_settings):
             result = await mcp_server.tools.search_workitems.fn(
@@ -121,6 +127,8 @@ class TestTools:
             assert "Found 2 work items" in result
             assert "TEST-123" in result
             assert "TEST-124" in result
+            assert "Test Item 1" in result
+            assert "Test Item 2" in result
             mock_driver.search_workitems.assert_called_once()
 
     @pytest.mark.asyncio
