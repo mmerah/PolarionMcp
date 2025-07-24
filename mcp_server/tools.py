@@ -107,17 +107,26 @@ async def search_workitems(
                 return f"No work items found in project '{project_id}' for query: '{query}'"
 
             output = f"Found {len(results)} work items for query '{query}':\n\n"
-            for i, item in enumerate(results[:20], 1):  # Limit to 20 results for chat
+            for i, item in enumerate(results[:20], 1):
                 output += f"{i}. "
-                if isinstance(item, dict):
-                    details = ", ".join([f"{k}: {v}" for k, v in item.items()])
-                    output += f"{details}\n"
-                else:  # It's a Workitem object
-                    output += (
-                        f"ID: {getattr(item, 'id', 'N/A')}, "
-                        f"Title: {getattr(item, 'title', 'N/A')}, "
-                        f"Status: {getattr(item.status, 'id', 'N/A')}\n"
-                    )
+                item_details = {
+                    "ID": getattr(item, "id", "N/A"),
+                    "Title": getattr(item, "title", "N/A"),
+                    "Type": (
+                        getattr(item.type, "id", "N/A")
+                        if hasattr(item, "type")
+                        else "N/A"
+                    ),
+                    "Status": (
+                        getattr(item.status, "id", "N/A")
+                        if hasattr(item, "status")
+                        else "N/A"
+                    ),
+                }
+                details_str = ", ".join(
+                    f"{k}: {v}" for k, v in item_details.items() if v != "N/A"
+                )
+                output += f"{details_str}\n"
             if len(results) > 20:
                 output += f"\n...and {len(results) - 20} more."
             return output
@@ -263,8 +272,8 @@ async def discover_work_item_types(project_id: str, limit: int = 20) -> str:
             # Collect unique types
             types_count: dict[str, int] = {}
             for item in results[:limit]:
-                if isinstance(item, dict) and "type" in item:
-                    type_value = item["type"]
+                type_value = getattr(item.type, "id", None)
+                if type_value:
                     types_count[type_value] = types_count.get(type_value, 0) + 1
 
             if not types_count:
