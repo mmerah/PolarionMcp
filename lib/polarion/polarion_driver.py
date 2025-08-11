@@ -295,7 +295,30 @@ class PolarionDriver:
                 "No project selected. Use .select_project() first."
             )
         try:
-            return self._project.searchWorkitem(query=query, field_list=field_list)
+            # Get results from Polarion (returns Zeep objects)
+            results = self._project.searchWorkitem(query=query, field_list=field_list)
+
+            # Convert Zeep objects to dictionaries
+            from zeep.helpers import serialize_object
+
+            serialized_results = []
+
+            # If no field_list specified, use default
+            actual_fields = field_list if field_list else ["id"]
+
+            for item in results:
+                # Serialize the full object
+                full_dict = serialize_object(item)
+
+                # Filter to only include requested fields
+                filtered_dict = {}
+                for field in actual_fields:
+                    if field in full_dict:
+                        filtered_dict[field] = full_dict[field]
+
+                serialized_results.append(filtered_dict)
+
+            return serialized_results
         except Exception as e:
             raise PolarionConnectionException(
                 f"Failed to search work items with query '{query}': {e}"
@@ -379,7 +402,7 @@ class PolarionDriver:
         Searches for plans using a Polarion Lucene query.
 
         Args:
-            query: The Lucene query string.
+            query: The Lucene query string. If empty, returns all plans.
 
         Returns:
             A list of Plan objects matching the query.
@@ -392,6 +415,13 @@ class PolarionDriver:
                 "No project selected. Use .select_project() first."
             )
         try:
+            # The Polarion library's searchPlan method appends "AND project.id:{id}" to the query
+            # and the service also adds "AND NOT HAS_VALUE:isTemplate"
+            # So we need to ensure the query doesn't start empty which would create invalid syntax
+            if not query or query.strip() == "":
+                # Use "NOT HAS_VALUE:dummy" as a always-true condition to get all plans
+                # This creates valid syntax when ANDed with other conditions
+                query = "NOT HAS_VALUE:dummyFieldThatDoesNotExist"
             return self._project.searchPlanFullItem(query=query)
         except Exception as e:
             raise PolarionConnectionException(

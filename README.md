@@ -6,7 +6,8 @@ A Model Context Protocol (MCP) server that provides seamless integration between
 
 - **Full MCP Protocol Support**: Implements tools, resources, and prompts
 - **Microsoft Copilot Studio Compatible**: Includes middleware for JSON-RPC ID type compatibility
-- **9 Powerful Tools**: Comprehensive access to Polarion data
+- **13 Powerful Tools**: Comprehensive access to Polarion data including plan support
+- **Plan Project Support**: Special tools for projects organized around plans (releases/iterations)
 - **Secure Authentication**: Token-based authentication with Polarion
 - **Production Ready**: Robust error handling and logging
 - **Modern Python**: Uses `pyproject.toml` and follows best practices
@@ -61,12 +62,71 @@ A Model Context Protocol (MCP) server that provides seamless integration between
 
    The server starts on `http://0.0.0.0:8000` with the MCP endpoint at `/mcp/`
 
+## Configuration System
+
+The server supports an optional configuration file that provides:
+- **Project aliases**: Use friendly names instead of cryptic project IDs
+- **Plan project marking**: Identify projects that use plans (releases/iterations)
+- **Pre-defined work item types**: Eliminate repeated discovery calls
+- **Custom field mappings**: Define project-specific fields
+- **Named queries**: Create reusable, project-specific searches
+
+### XML Custom Fields Parser
+
+For quick configuration of custom fields from Polarion XML exports, see [XML_PARSER.md](XML_PARSER.md).
+
+### Setting Up Configuration
+
+1. Copy the example configuration:
+   ```bash
+   cp polarion_config.example.yaml polarion_config.yaml
+   ```
+
+2. Edit `polarion_config.yaml` to define your projects:
+   ```yaml
+   projects:
+     # Regular project
+     webstore:  # Your alias
+       id: WEBSTORE_V3  # Actual Polarion ID
+       work_item_types:
+         - systemRequirement
+         - specification
+         - defect
+       default_queries:
+         open_bugs: "type:defect AND status:open"
+         my_items: "assignee.id:$current_user"
+     
+     # Plan-based project (for releases/iterations)
+     releases:
+       id: RELEASES_PROJECT
+       is_plan: true  # Mark as plan project
+       work_item_types:
+         - feature
+         - userStory
+         - task
+   ```
+
+3. Use aliases in all tool calls:
+   ```
+   # Instead of: get_project_info("WEBSTORE_V3")
+   # Use: get_project_info("webstore")
+   
+   # Named queries work automatically:
+   search_workitems("webstore", "query:open_bugs")
+   ```
+
 ## Available Tools
+
+### Configuration Tools
+- **`list_projects`**: Show all configured project aliases (indicates which are plan projects)
+- **`get_project_types`**: Get configured work item types for a project
+- **`get_named_queries`**: List available named queries for a project
 
 ### Tool Usage Conventions for AI Agents
 - **Error format**: Strings starting with "❌" indicate errors
 - **Success format**: Human-readable strings with truncated lists (20-50 items max)
-- **Inputs**: `project_id` is the project key (e.g., `MYPROJ`); `document_id` is `Space/DocumentID` (e.g., `QA/TestSpecs`)
+- **Inputs**: `project_alias` accepts both aliases (e.g., `webstore`) and actual IDs (e.g., `MYPROJ`); `document_id` is `Space/DocumentID` (e.g., `QA/TestSpecs`)
+- **Plan Projects**: Some tools are specific to plan projects, others only work with regular projects
 
 ### 1. `health_check`
 Checks the connection to the Polarion server.
@@ -75,56 +135,91 @@ Checks the connection to the Polarion server.
 ### 2. `get_project_info`
 Retrieves information about a Polarion project.
 - **Parameters**: 
-  - `project_id`: The ID of the Polarion project
+  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
 - **Returns**: Project name and description
 
-### 3. `get_workitem`
+### 3. `get_workitem` *(Regular Projects Only)*
 Gets detailed information about a specific work item.
 - **Parameters**:
-  - `project_id`: The ID of the Polarion project
+  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
   - `workitem_id`: The ID of the work item (e.g., "PROJ-123")
 - **Returns**: Work item details including title, type, status, author, dates
+- **Note**: Not supported for plan projects - use `get_plan_workitems` instead
 
-### 4. `search_workitems`
-Searches for work items using Lucene query syntax.
+### 4. `search_workitems` *(Regular Projects Only)*
+Searches for work items using Lucene query syntax or named queries.
 - **Parameters**:
-  - `project_id`: The ID of the Polarion project
-  - `query`: Lucene query string (e.g., "status:open AND type:requirement")
+  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
+  - `query`: Lucene query or named query (e.g., "query:open_bugs")
   - `field_list`: Optional comma-separated list of fields to return
 - **Returns**: List of matching work items
+- **Note**: Not supported for plan projects - use `get_plan_workitems` instead
+
+**Query Syntax**: Uses Apache Lucene query syntax with Polarion-specific fields. For comprehensive query syntax documentation, see the [official Siemens Polarion documentation](https://docs.sw.siemens.com/en-US/doc/230235217/PL20190701144002440.xid1465510/xid1570724) and [Apache Lucene Query Parser Syntax](https://lucene.apache.org/core/2_9_4/queryparsersyntax.html).
 
 ### 5. `get_test_runs`
 Retrieves all test runs in a project.
 - **Parameters**:
-  - `project_id`: The ID of the Polarion project
+  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
 - **Returns**: List of test runs with ID, title, and status
 
 ### 6. `get_test_run`
 Gets details of a specific test run.
 - **Parameters**:
-  - `project_id`: The ID of the Polarion project
+  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
   - `test_run_id`: The ID of the test run
 - **Returns**: Test run details including status, dates, and test case count
 
 ### 7. `get_documents`
 Lists all documents in a project.
 - **Parameters**:
-  - `project_id`: The ID of the Polarion project
+  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
 - **Returns**: List of documents with ID, title, and location
 
 ### 8. `get_test_specs_from_document`
 Extracts test specification IDs from a document.
 - **Parameters**:
-  - `project_id`: The ID of the Polarion project
+  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
   - `document_id`: The ID of the document (format: `Space/DocumentID`)
 - **Returns**: List of test specification IDs found in the document
 
 ### 9. `discover_work_item_types`
 Discovers available work item types in a project.
 - **Parameters**:
-  - `project_id`: The ID of the Polarion project
+  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
   - `limit`: Maximum number of work items to sample (default: 1000)
 - **Returns**: List of work item types with occurrence counts
+
+## Plan-Specific Tools
+
+These tools only work with projects configured with `is_plan: true`:
+
+### 10. `get_plans`
+Lists all plans (releases, iterations) in a plan project.
+- **Parameters**:
+  - `project_alias`: Project alias or ID (must be a plan project)
+- **Returns**: List of plans with ID, name, and template type
+
+### 11. `get_plan`
+Gets detailed information about a specific plan.
+- **Parameters**:
+  - `project_alias`: Project alias or ID (must be a plan project)
+  - `plan_id`: The ID of the plan (e.g., "R2024.4" or "Sprint23")
+- **Returns**: Plan details including name, dates, template, allowed types
+
+### 12. `get_plan_workitems`
+Gets all work items in a specific plan.
+- **Parameters**:
+  - `project_alias`: Project alias or ID (must be a plan project)
+  - `plan_id`: The ID of the plan
+- **Returns**: List of work items in the plan
+
+### 13. `search_plans`
+Searches for plans using Lucene query syntax.
+- **Parameters**:
+  - `project_alias`: Project alias or ID (must be a plan project)
+  - `query`: Lucene query (e.g., "templateId:release", "parent.id:R2024")
+- **Returns**: List of matching plans
 
 ## MCP Resources
 
@@ -216,14 +311,18 @@ PolarionMcp/
 │   ├── main.py         # Server entry point
 │   ├── tools.py        # MCP tool definitions
 │   ├── middleware.py   # Copilot Studio compatibility layer
-│   └── settings.py     # Configuration management
+│   ├── config.py       # Project alias and query configuration
+│   ├── helpers.py      # Helper functions for formatting tool outputs
+│   └── settings.py     # Environment and configuration loading
 ├── lib/                 # Core libraries
 │   └── polarion/
 │       └── polarion_driver.py  # Polarion API wrapper
+├── polarion_config.example.yaml  # Configuration template
 ├── openapi.yaml        # OpenAPI specification for Copilot Studio
 ├── run_server.sh       # Convenience startup script
 ├── pyproject.toml      # Python package configuration
 ├── .env.example        # Environment variables template
+├── WORKFLOW_EXAMPLES.md # Usage patterns and examples. Customize and use as system instructions for your AI Agent.
 └── README.md           # This file
 ```
 

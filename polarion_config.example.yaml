@@ -1,0 +1,133 @@
+# Polarion MCP Server Project Configuration
+# This file allows you to define project aliases, work item types,
+# and reusable queries for your Polarion projects.
+#
+# Copy this file to polarion_config.yaml and customize for your projects.
+
+# Project configurations
+projects:
+  # Project alias (what you'll use in commands)
+  webstore:
+    # Actual Polarion project ID
+    id: WEBSTORE_V3
+    # Human-readable name
+    name: Web Store Project
+    # Optional description
+    description: E-commerce platform development project
+    
+    # Pre-defined work item types for this project
+    # This eliminates the need to call discover_work_item_types
+    work_item_types:
+      - systemRequirement
+      - specification
+      - defect
+      - task
+      - testcase
+      - enhancement
+    
+    # Custom fields per work item type
+    # IMPORTANT: These are IN ADDITION to standard Polarion fields (id, title, status, etc.)
+    # These custom fields are used by get_workitem() to fetch additional fields for specific types
+    # NOTE: Custom fields CANNOT be retrieved in search_workitems() results due to Polarion API limitations
+    # However, you CAN search/filter by custom field values in queries (e.g., "severity:critical")
+    custom_fields:
+      systemRequirement:
+        - acceptanceCriteria   # Often a required field
+        - riskRelevance       # Example: YES/NO enum field
+        - importance          # Example: enum field
+        - businessValue
+        - failureModes        # Use field ID from Polarion, not display name
+        - jiraLink           # Example: string field for external links
+        - proposedTestLevel   # Example: multi-value enum
+      specification:
+        - componentId
+        - testCoverage
+        - acceptanceCriteria
+      defect:
+        - severity           # Will be accessed as customFields.severity in API
+        - foundInVersion
+        - fixedInVersion
+    
+    # Named queries for common searches
+    default_queries:
+      open_bugs: "type:defect AND status:open"
+      critical_bugs: "type:defect AND severity:critical AND status:open"
+      my_items: "assignee.id:$current_user AND status:open"
+      requirements: "type:(systemRequirement OR specification)"
+      sprint_items: "plannedFor.id:$current_sprint"
+      recent: "created:[$today - 7d$ TO $today$]"
+      
+  # Another project example
+  mobile:
+    id: MOBILE_APP
+    name: Mobile Application
+    description: iOS and Android mobile app project
+    
+    work_item_types:
+      - requirement
+      - userStory
+      - bug
+      - task
+      - epic
+    
+    custom_fields:
+      userStory:
+        - storyPoints
+        - acceptanceCriteria
+      bug:
+        - severity
+        - platform  # iOS, Android, Both
+          
+    default_queries:
+      ios_bugs: "type:bug AND platform:iOS"
+      android_bugs: "type:bug AND platform:Android"
+      backlog: "type:userStory AND status:draft"
+      in_progress: "status:in_progress"
+      
+  # Minimal configuration example
+  testing:
+    id: QA_TEST
+    name: Testing Project
+    # If work_item_types is not specified, discovery will be used
+    # But you can still define useful queries
+    default_queries:
+      failed_tests: "type:testcase AND testStatus:failed"
+      automation_ready: "type:testcase AND automationStatus:ready"
+      
+  # Plan-based project example (e.g., for releases and iterations)
+  releases:
+    id: RELEASES_PROJECT
+    name: Release Planning
+    is_plan: true  # Mark this as a plan-based project
+    description: Project containing release and iteration plans
+    
+    # For plan projects, these are the work item types that can be added to plans
+    work_item_types:
+      - feature
+      - userStory
+      - task
+      - defect
+    
+    default_queries:
+      # Queries work for items within plans
+      current_release: "plannedIn.id:R2024.4"
+      unplanned: "NOT HAS_VALUE:plannedIn"
+      high_priority_features: "type:feature AND priority:high"
+      # Hierarchical queries
+      user_stories: "type:userStory"
+      tasks: "type:task"
+      top_level: "NOT HAS_VALUE:parent"  # Items without parents
+      with_children: "HAS_VALUE:children"  # Items that have children
+      # Plan-specific queries
+      in_any_plan: "HAS_VALUE:plannedIn"
+      current_sprint: "plannedIn.id:Sprint23"
+
+# Standard fields to display in search results
+# These define the default fields returned by search_workitems() when no field_list is specified
+# IMPORTANT: Custom fields CANNOT be retrieved in search results due to Polarion API limitations
+# To get custom field values, use get_workitem() on individual items after searching
+#
+# Common Polarion standard fields for reference:
+#   id, title, type, status, assignee, author, created, updated, priority, 
+#   description, dueDate, plannedFor, resolution, severity, linkedWorkItems
+display_fields: ["id", "title", "type", "status", "assignee"]

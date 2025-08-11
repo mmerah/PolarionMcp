@@ -9,6 +9,12 @@ __pycache__/
 .env.*.local
 environment.yml
 
+# User configuration
+polarion_config.yaml
+polarion_config.yml
+polarion_config.yaml.bak
+polarion_config.yml.bak
+
 # Virtual environments
 .venv/
 venv/
