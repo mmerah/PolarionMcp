@@ -756,3 +756,7 @@ async def workitem_analysis(project_alias: str, workitem_id: str) -> str:
     # Call the actual function implementation, not the tool wrapper
     workitem_info = await get_workitem.fn(project_alias, workitem_id)
     return f"Please analyze this Polarion work item and provide recommendations:\n\n{workitem_info}"
+
+
+# Register HTTP routes and metadata required for GPT Actions integration.
+import mcp_server.actions  # noqa: E402,F401

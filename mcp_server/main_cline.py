@@ -81,11 +81,6 @@ def main():
     logger.info(f"Server running on http://{args.host}:{args.port}")
     logger.info(f"MCP endpoint available at http://{args.host}:{args.port}/mcp")
 
-    if COPILOT_STUDIO_MODE:
-        logger.info(
-            f"Public tunnel URL: https://mbbgk00z-{args.port}.euw.devtunnels.ms/mcp"
-        )
-
     uvicorn.run(
         app,
         host=args.host,

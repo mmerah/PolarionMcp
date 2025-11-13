@@ -1,32 +1,460 @@
-# yaml-language-server: $schema=https://json.schemastore.org/swagger-2.0.json
-swagger: "2.0"
+openapi: 3.1.0
 info:
   title: Polarion MCP Server
-  description: Model Context Protocol server for Polarion ALM integration
+  description: >
+    HTTP wrapper around the Polarion MCP tools so agents can interact with
+    Polarion ALM projects, work items, plans, test runs, and documents.
   version: "1.0.0"
-host: yourhost.devtunnels.com
-basePath: /
-schemes:
-  - https
-consumes:
-  - application/json
-produces:
-  - text/event-stream
-  - application/json
+servers:
+  - url: https://yourhost.com
 paths:
-  /mcp/:
-    post:
-      summary: Polarion ALM Integration
-      description: Connect to Polarion ALM to query projects, work items, test runs, documents, and perform searches using natural language
-      operationId: mcpStreamable
-      x-ms-agentic-protocol: mcp-streamable-1.0
-      parameters: []
+  /actions/health:
+    get:
+      summary: Verify the Polarion connection
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: healthCheck
       responses:
-        200:
-          description: Successful MCP response
+        '200':
+          description: Health check result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '502':
+          description: Polarion connection failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects:
+    get:
+      summary: List configured projects
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: listProjects
+      responses:
+        '200':
+          description: Projects listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}:
+    get:
+      summary: Get project details
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: getProjectInfo
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
           schema:
-            type: object
-        400:
-          description: Bad request
-        500:
-          description: Internal server error
+            type: string
+      responses:
+        '200':
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '404':
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/types:
+    get:
+      summary: Get configured work item types
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: getProjectTypes
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Work item type listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/named-queries:
+    get:
+      summary: List named queries configured for a project
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: getNamedQueries
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Named query listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/workitems/{workitem_id}:
+    get:
+      summary: Get an individual work item
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: getWorkitem
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+        - name: workitem_id
+          in: path
+          required: true
+          description: Work item ID including the project prefix (e.g. `MYPROJ-123`).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Work item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '404':
+          description: Work item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/workitems/search:
+    post:
+      summary: Search for work items using Lucene or named queries
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: searchWorkitems
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchWorkitemsRequest'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/workitems/discover:
+    get:
+      summary: Discover work item types in a project
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: discoverWorkitemTypes
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of items to sample.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Discovered work item types
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '400':
+          description: Invalid limit supplied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/test-runs:
+    get:
+      summary: List test runs for a project
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: listTestRuns
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Test run listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/test-runs/{test_run_id}:
+    get:
+      summary: Get a specific test run
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: getTestRun
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+        - name: test_run_id
+          in: path
+          required: true
+          description: Polarion test run identifier.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Test run details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '404':
+          description: Test run not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/documents:
+    get:
+      summary: List live documents within a project
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: listDocuments
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Document listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/documents/test-specs:
+    get:
+      summary: Get linked test specifications for a document
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: getTestSpecsFromDocument
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+        - name: document_path
+          in: query
+          required: true
+          description: Document path such as `QA/TestSpecs`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Test specifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '400':
+          description: Missing document path
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/plans:
+    get:
+      summary: List plans available in a project
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: listPlans
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plans listing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/plans/{plan_id}:
+    get:
+      summary: Get details for a specific plan
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: getPlan
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+        - name: plan_id
+          in: path
+          required: true
+          description: Polarion plan identifier (release, iteration, etc.).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plan details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '404':
+          description: Plan not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/plans/{plan_id}/workitems:
+    get:
+      summary: Get work items assigned to a plan
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: getPlanWorkitems
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+        - name: plan_id
+          in: path
+          required: true
+          description: Polarion plan identifier.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plan work items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '404':
+          description: Plan not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+  /actions/projects/{project_alias}/plans/search:
+    post:
+      summary: Search for plans using Lucene
+      description: Refer to the GPT agent instructions for usage and parameters.
+      operationId: searchPlans
+      parameters:
+        - name: project_alias
+          in: path
+          required: true
+          description: Polarion project alias or ID.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchPlansRequest'
+      responses:
+        '200':
+          description: Plan search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+components:
+  schemas:
+    ActionResponse:
+      type: object
+      description: Standard response envelope returned by GPT Action routes.
+      required:
+        - tool
+      properties:
+        tool:
+          type: string
+          description: Name of the underlying MCP tool that was invoked.
+        result_text:
+          type: string
+          description: Human-readable text returned by the tool.
+        structured_result:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Optional structured data if the MCP tool provided it.
+        error:
+          type: string
+          description: Error message when the action failed.
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error context.
+    SearchWorkitemsRequest:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: Lucene query string or named query (e.g. `query:open_bugs`).
+        field_list:
+          type: string
+          description: Optional comma-separated list of fields to include.
+    SearchPlansRequest:
+      type: object
+      properties:
+        query:
+          type: string
+          description: >
+            Lucene query string used to filter plans. Defaults to an empty query
+            which returns all plans.

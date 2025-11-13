@@ -11,6 +11,7 @@ A Model Context Protocol (MCP) server that provides seamless integration between
 - **Secure Authentication**: Token-based authentication with Polarion
 - **Production Ready**: Robust error handling and logging
 - **Modern Python**: Uses `pyproject.toml` and follows best practices
+- **GPT Actions**: Ships a REST wrapper, OpenAPI spec, and manifest for GPT Actions
 
 ## Prerequisites
 
@@ -62,6 +63,22 @@ A Model Context Protocol (MCP) server that provides seamless integration between
 
    The server starts on `http://0.0.0.0:8000` with the MCP endpoint at `/mcp/`
 
+## GPT Actions Integration
+
+The server now exposes an HTTP wrapper around every MCP tool so you can connect it to custom GPTs through GPT Actions.
+
+1. **Expose the server over HTTPS**: for custom GPTs the server must be reachable by OpenAI, e.g. through an Azure Dev Tunnel or other reverse proxy.
+2. **Provide the OpenAPI spec URL**: tell GPT Actions to use `https://<your-domain>/openapi.json`.
+3. **Available endpoints**: all actions live under `/actions/...` and return JSON envelopes. The OpenAPI spec (`openapi.yaml` / `openapi.json`) describes each route and mirrors the existing MCP tools.
+4. **Agent instructions**: Use the generated `agent_instructions.md` (full) as a knowledge file and `agent_instructions_simple.md` (quick reference) as system instruction. See [Configuration System](#configuration-system) section for details on generating these files.
+
+You can verify the setup locally:
+
+```bash
+curl http://localhost:8000/openapi.json | jq '.paths | keys'
+curl http://localhost:8000/actions/projects
+```
+
 ## Configuration System
 
 The server supports an optional configuration file that provides:
@@ -106,7 +123,21 @@ For quick configuration of custom fields from Polarion XML exports, see [XML_PAR
          - task
    ```
 
-3. Use aliases in all tool calls:
+3. **Generate agent instructions** (required after configuration):
+   ```bash
+   python -m mcp_server.docgen
+   ```
+
+   This generates two files based on your `polarion_config.yaml`:
+   - `agent_instructions.md` - Full detailed instructions
+   - `agent_instructions_simple.md` - Quick reference
+
+   **Note**: These files are gitignored as they contain project-specific configuration. Always regenerate them after:
+   - Modifying `polarion_config.yaml`
+   - Changing project configurations
+   - Adding/removing tools
+
+4. Use aliases in all tool calls:
    ```
    # Instead of: get_project_info("WEBSTORE_V3")
    # Use: get_project_info("webstore")
@@ -247,7 +278,7 @@ The server endpoint will be at: `https://your-public-url/mcp/`
    The server must be accessible at the public URL above.
 
 2. **OpenAPI Specification**
-   The `openapi.yaml` file is pre-configured with:
+   The `openapi.copilot.yaml` file is pre-configured with:
    - Correct host URL
    - MCP protocol specification: `x-ms-agentic-protocol: mcp-streamable-1.0`
    - Proper endpoint configuration
@@ -318,7 +349,8 @@ PolarionMcp/
 │   └── polarion/
 │       └── polarion_driver.py  # Polarion API wrapper
 ├── polarion_config.example.yaml  # Configuration template
-├── openapi.yaml        # OpenAPI specification for Copilot Studio
+├── openapi.yaml        # OpenAPI specification with HTTP actions (GPT Actions)
+├── openapi.copilot.yaml # OpenAPI specification for Copilot Studio
 ├── run_server.sh       # Convenience startup script
 ├── pyproject.toml      # Python package configuration
 ├── .env.example        # Environment variables template

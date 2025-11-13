@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 
 import uvicorn
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 
 # Add project root to path to allow imports from lib
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -14,8 +16,23 @@ from mcp_server.tools import mcp  # noqa: E402
 
 # --- App Setup ---
 
+cors_middleware = [
+    Middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_headers=["*"],
+        allow_methods=["*"],
+        allow_credentials=False,
+    )
+]
+
 # Create the MCP application using the FastMCP helper
-app = mcp.http_app(path="/mcp", transport="streamable-http", json_response=True)
+app = mcp.http_app(
+    path="/mcp",
+    transport="streamable-http",
+    json_response=True,
+    middleware=cors_middleware,
+)
 
 # Wrap the app with the crucial middleware for Copilot Studio compatibility
 app = CopilotStudioIDFix(app)  # type: ignore[assignment]
@@ -70,9 +87,6 @@ def main():
 
     logger.info(f"Starting Polarion MCP Server on http://{args.host}:{args.port}")
     logger.info(f"MCP endpoint available at http://{args.host}:{args.port}/mcp")
-    logger.info(
-        f"Public tunnel URL: https://mbbgk00z-{args.port}.euw.devtunnels.ms/mcp"
-    )
 
     uvicorn.run(
         app,

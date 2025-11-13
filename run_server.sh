@@ -64,7 +64,7 @@ echo -e "${GREEN}Starting MCP Server...${NC}"
 echo -e "Host: ${HOST}"
 echo -e "Port: ${PORT}"
 echo -e "Local URL: http://localhost:${PORT}/mcp"
-echo -e "Tunnel URL: https://mbbgk00z-${PORT}.euw.devtunnels.ms/mcp"
+echo -e "Tunnel URL: https://yourhost-${PORT}.euw.devtunnels.ms/mcp"
 echo ""
 
 # Start the server
