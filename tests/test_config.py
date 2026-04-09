@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from mcp_server.config import ConfigManager, PolarionConfig, ProjectConfig
+from polarion_mcp.core.config import ConfigManager, PolarionConfig, ProjectConfig
 
 
 class TestConfigManager:
@@ -18,7 +18,7 @@ class TestConfigManager:
 
     def test_init_without_config_file(self):
         """Test initialization without a configuration file."""
-        with patch("mcp_server.config.Path.exists", return_value=False):
+        with patch("polarion_mcp.core.config.Path.exists", return_value=False):
             manager = ConfigManager()
             assert manager.config is not None
             assert isinstance(manager.config, PolarionConfig)

@@ -2,9 +2,9 @@
 Generate agent instruction markdown files from registered FastMCP tools.
 
 Usage:
-    python -m mcp_server.docgen               # generates both variants
-    python -m mcp_server.docgen --variant full --output custom.md
-    python -m mcp_server.docgen --variant simple
+    python -m polarion_mcp.docgen.generator               # generates both variants
+    python -m polarion_mcp.docgen.generator --variant full --output custom.md
+    python -m polarion_mcp.docgen.generator --variant simple
 """
 
 from __future__ import annotations
@@ -20,9 +20,9 @@ from typing import Dict, Iterable, Literal
 import yaml
 from fastmcp.tools.tool import FunctionTool
 
-from mcp_server.tools import mcp
+from polarion_mcp.mcp.tools import mcp
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_FULL_PATH = REPO_ROOT / "agent_instructions.md"
 DEFAULT_SIMPLE_PATH = REPO_ROOT / "agent_instructions_simple.md"
 CONFIG_PATH = REPO_ROOT / "polarion_config.yaml"
@@ -288,7 +288,7 @@ async def generate_markdown(variant: Variant) -> str:
         "- Prioritize correctness over coverage. If unsure, say so and suggest additional filters or access needed.",
         "- Respect access controls: only surface data visible to the signed-in user. Flag possible permission limitations.",
         "- Prefer structured outputs. Use concise tables or bullets with key fields (ID, title, status, owner, priority/severity, updated date, project, path/module). Show counts and aggregates where helpful.",
-        "- Always include artifact identifiers and, when available, direct links returned by the API. Use the user’s terminology.",
+        "- Always include artifact identifiers and, when available, direct links returned by the API. Use the user's terminology.",
         "- Follow trace links (parent/child, satisfies/implements, verifies/tested by, relates to, depends on, duplicates, etc.) and present multi-hop traces clearly (e.g., Requirement → Story → Test Case → Test Run → Defect).",
         "- For large result sets, summarize first (totals, key segments, top risks) before offering drill-downs or filters.",
         "- Render simple diagrams or matrices when visual traces help. Prefer the canvas for node-link diagrams or coverage heatmaps.",
@@ -302,7 +302,7 @@ async def generate_markdown(variant: Variant) -> str:
         "",
         "- Short, plain-language explanations focused on outcomes and decisions.",
         "- Use sections such as Summary, Key Findings, Evidence (tables/IDs), and Next Steps when appropriate.",
-        "- Offer optional next actions (e.g., “Expand to linked defects?”, “Open coverage gaps?”).",
+        "- Offer optional next actions (e.g., "Expand to linked defects?", "Open coverage gaps?").",
         "- Prefer tables or canvas sketches to images; primary data authority is the Polarion MCP connection.",
         "",
         "## Available Tools",

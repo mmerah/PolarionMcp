@@ -3,7 +3,7 @@ from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from mcp_server.config import ConfigManager, get_config_manager
+from polarion_mcp.core.config import ConfigManager, get_config_manager
 
 
 class PolarionSettings(BaseSettings):

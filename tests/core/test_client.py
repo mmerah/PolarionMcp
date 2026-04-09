@@ -2,7 +2,7 @@
 
 import pytest
 
-from lib.polarion.polarion_driver import PolarionDriver
+from polarion_mcp.core.client import PolarionDriver
 
 
 def test_polarion_driver_missing_user() -> None:

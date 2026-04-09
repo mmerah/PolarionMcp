@@ -1,11 +1,14 @@
 """
-HTTP routes and metadata that expose Polarion tools to GPT Actions.
+HTTP routes that expose Polarion tools to GPT Actions.
 
 These routes wrap the underlying FastMCP tools so they can be called through
 standard HTTP requests defined in the OpenAPI definition that GPT Actions
 consumes. The endpoints all return structured JSON responses that include the
 plain-text result produced by the MCP tool along with any structured payload
 if one is available.
+
+This module is imported by polarion_mcp.mcp.server when mode='gpt', which
+triggers the @mcp.custom_route decorators and registers the routes.
 """
 
 from __future__ import annotations
@@ -24,12 +27,12 @@ from starlette import status
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from mcp_server.tools import mcp
+from polarion_mcp.mcp.tools import mcp
 
 logger = logging.getLogger(__name__)
 
 # Paths for static metadata that back the routes below
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 OPENAPI_SPEC_PATH = REPO_ROOT / "openapi.yaml"
 
 # Map HTTP method/path pairs to the underlying MCP tool name so we can surface
@@ -70,6 +73,7 @@ except FileNotFoundError:
 except yaml.YAMLError as exc:
     logger.error("Failed to parse OpenAPI specification: %s", exc)
     _OPENAPI_SPEC = None
+
 
 async def _run_tool(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """

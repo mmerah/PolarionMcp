@@ -1,5 +1,5 @@
 """
-Polarion driver class - A robust, read-only client for accessing Polarion data.
+Polarion client — a robust, read-only driver for accessing Polarion ALM data.
 """
 
 # The atexit unregistering is a specific design choice to control session

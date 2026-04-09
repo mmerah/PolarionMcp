@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-polarion"
-version = "0.2.0"
-description = "A FastMCP-based server for Polarion, fully compatible with Microsoft Copilot Studio."
+version = "0.3.0"
+description = "CLI-first Polarion ALM client with MCP server, Copilot Studio, and GPT Actions support."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -39,10 +39,17 @@ dependencies = [
 "Bug Tracker" = "https://github.com/mmerah/PolarionMcp/issues"
 
 [project.scripts]
-mcp-polarion = "mcp_server.main:main"
+mcp-polarion = "polarion_mcp.cli.main:main"
 
 [tool.setuptools]
-packages = ["mcp_server", "lib"]
+packages = [
+    "polarion_mcp",
+    "polarion_mcp.core",
+    "polarion_mcp.mcp",
+    "polarion_mcp.gpt_actions",
+    "polarion_mcp.docgen",
+    "polarion_mcp.cli",
+]
 
 [project.optional-dependencies]
 dev = [

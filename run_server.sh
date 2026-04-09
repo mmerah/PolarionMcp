@@ -35,12 +35,17 @@ if [ ! -f ".env" ]; then
 fi
 
 # Parse command line arguments
+MODE="http"
 HOST="0.0.0.0"
 PORT="8000"
 EXTRA_ARGS=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --mode)
+            MODE="$2"
+            shift 2
+            ;;
         --port)
             PORT="$2"
             shift 2
@@ -60,13 +65,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo -e "${GREEN}Starting MCP Server...${NC}"
+echo -e "${GREEN}Starting MCP Server (mode: ${MODE})...${NC}"
 echo -e "Host: ${HOST}"
 echo -e "Port: ${PORT}"
 echo -e "Local URL: http://localhost:${PORT}/mcp"
-echo -e "Tunnel URL: https://yourhost-${PORT}.euw.devtunnels.ms/mcp"
 echo ""
 
-# Start the server
-echo -e "${BLUE}Starting MCP server with FastMCP...${NC}"
-python -m mcp_server.main --host "$HOST" --port "$PORT" $EXTRA_ARGS
+mcp-polarion serve --mode "$MODE" --host "$HOST" --port "$PORT" $EXTRA_ARGS

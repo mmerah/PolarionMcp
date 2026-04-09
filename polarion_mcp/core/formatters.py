@@ -1,11 +1,11 @@
 """
-Helper functions for MCP tools to handle complex formatting and field extraction.
+Formatter functions — convert raw Polarion API objects into human-readable strings.
 """
 
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-from mcp_server.config import ConfigManager
+from polarion_mcp.core.config import ConfigManager
 
 
 def _parse_workitem_id_from_uri(uri: str) -> Optional[str]:

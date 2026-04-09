@@ -4,8 +4,8 @@ from typing import Optional
 
 from fastmcp import FastMCP
 
-from lib.polarion.polarion_driver import PolarionConnectionException, PolarionDriver
-from mcp_server.helpers import (
+from polarion_mcp.core.client import PolarionConnectionException, PolarionDriver
+from polarion_mcp.core.formatters import (
     extract_plan_details,
     extract_test_run_details,
     extract_work_item_types_from_results,
@@ -20,7 +20,7 @@ from mcp_server.helpers import (
     format_test_runs,
     format_workitem_details,
 )
-from mcp_server.settings import config_manager, settings
+from polarion_mcp.core.settings import config_manager, settings
 
 logger = logging.getLogger(__name__)
 
@@ -756,7 +756,3 @@ async def workitem_analysis(project_alias: str, workitem_id: str) -> str:
     # Call the actual function implementation, not the tool wrapper
     workitem_info = await get_workitem.fn(project_alias, workitem_id)
     return f"Please analyze this Polarion work item and provide recommendations:\n\n{workitem_info}"
-
-
-# Register HTTP routes and metadata required for GPT Actions integration.
-import mcp_server.actions  # noqa: E402,F401

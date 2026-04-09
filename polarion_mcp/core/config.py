@@ -1,5 +1,5 @@
 """
-Configuration management for Polarion MCP Server.
+Configuration management for Polarion MCP.
 Handles project aliases, work item types, and named queries.
 """
 

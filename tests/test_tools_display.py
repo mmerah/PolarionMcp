@@ -2,13 +2,13 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from mcp_server.config import ConfigManager
+from polarion_mcp.core.config import ConfigManager
 
 
 @pytest.mark.asyncio
 async def test_get_project_types_field_display():
     """Test that get_project_types shows all fields correctly."""
-    import mcp_server.tools
+    import polarion_mcp.mcp.tools
 
     # Mock config manager
     mock_config_manager = Mock(spec=ConfigManager)
@@ -21,8 +21,8 @@ async def test_get_project_types_field_display():
         ["id", "title", "status", "customFields.businessValue"],
     ]
 
-    with patch("mcp_server.tools.config_manager", mock_config_manager):
-        result = await mcp_server.tools.get_project_types.fn("testproj")
+    with patch("polarion_mcp.mcp.tools.config_manager", mock_config_manager):
+        result = await polarion_mcp.mcp.tools.get_project_types.fn("testproj")
 
         # Verify output structure
         assert "Work Item Types for 'Test Project'" in result
@@ -47,7 +47,7 @@ async def test_get_project_types_field_display():
 @pytest.mark.asyncio
 async def test_discover_work_item_types_configured_field_display():
     """Test that discover_work_item_types shows all fields when configured."""
-    import mcp_server.tools
+    import polarion_mcp.mcp.tools
 
     # Mock config manager with configured types
     mock_config_manager = Mock(spec=ConfigManager)
@@ -58,8 +58,8 @@ async def test_discover_work_item_types_configured_field_display():
         ["id", "title", "status", "assignee", "customFields.storyPoints"],
     ]
 
-    with patch("mcp_server.tools.config_manager", mock_config_manager):
-        result = await mcp_server.tools.discover_work_item_types.fn("testproj")
+    with patch("polarion_mcp.mcp.tools.config_manager", mock_config_manager):
+        result = await polarion_mcp.mcp.tools.discover_work_item_types.fn("testproj")
 
         # Verify output structure for configured types
         assert "Work Item Types for 'TEST_PROJ' (from configuration)" in result
@@ -78,7 +78,7 @@ async def test_discover_work_item_types_configured_field_display():
 @pytest.mark.asyncio
 async def test_field_display_no_custom_fields():
     """Test field display when there are no custom fields configured."""
-    import mcp_server.tools
+    import polarion_mcp.mcp.tools
 
     # Mock config manager with no custom fields
     mock_config_manager = Mock(spec=ConfigManager)
@@ -92,8 +92,8 @@ async def test_field_display_no_custom_fields():
         "type",
     ]
 
-    with patch("mcp_server.tools.config_manager", mock_config_manager):
-        result = await mcp_server.tools.get_project_types.fn("simple")
+    with patch("polarion_mcp.mcp.tools.config_manager", mock_config_manager):
+        result = await polarion_mcp.mcp.tools.get_project_types.fn("simple")
 
         # Verify standard fields are shown
         assert "Standard fields: id, title, status, type" in result

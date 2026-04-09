@@ -1,403 +1,229 @@
-# Polarion MCP Server
+# mcp-polarion
 
-A Model Context Protocol (MCP) server that provides seamless integration between Polarion ALM and AI assistants like Microsoft Copilot Studio and Cline. Built with FastMCP 2.10.6, this server enables AI agents to interact with Polarion projects, work items, test runs, documents, and more.
-
-## Features
-
-- **Full MCP Protocol Support**: Implements tools, resources, and prompts
-- **Microsoft Copilot Studio Compatible**: Includes middleware for JSON-RPC ID type compatibility
-- **13 Powerful Tools**: Comprehensive access to Polarion data including plan support
-- **Plan Project Support**: Special tools for projects organized around plans (releases/iterations)
-- **Secure Authentication**: Token-based authentication with Polarion
-- **Production Ready**: Robust error handling and logging
-- **Modern Python**: Uses `pyproject.toml` and follows best practices
-- **GPT Actions**: Ships a REST wrapper, OpenAPI spec, and manifest for GPT Actions
-
-## Prerequisites
-
-- Python 3.10+
-- Git
-- Access to a Polarion instance with:
-  - Polarion URL
-  - Username
-  - Personal access token
-- Microsoft Copilot Studio account (for AI agent integration)
+A CLI-first Polarion ALM client with MCP server support for AI assistants (Cline, Claude Code, Copilot Studio) and OpenAI GPT Actions.
 
 ## Installation
 
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/mmerah/PolarionMcp.git
-   cd PolarionMcp
-   ```
-
-2. **Configure Polarion Credentials**
-   
-   Create a `.env` file in the project root:
-   ```bash
-   cp .env.example .env
-   ```
-   
-   Edit `.env` with your credentials:
-   ```env
-   POLARION_URL=https://your-polarion-instance.com/polarion
-   POLARION_USER=your-username
-   POLARION_TOKEN=your-personal-access-token
-   ```
-
-3. **Run the Server**
-   
-   Using the convenience script (recommended):
-   ```bash
-   chmod +x run_server.sh
-   ./run_server.sh
-   ```
-   
-   Or manually:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   pip install -e .
-   python -m mcp_server.main
-   ```
-
-   The server starts on `http://0.0.0.0:8000` with the MCP endpoint at `/mcp/`
-
-## GPT Actions Integration
-
-The server now exposes an HTTP wrapper around every MCP tool so you can connect it to custom GPTs through GPT Actions.
-
-1. **Expose the server over HTTPS**: for custom GPTs the server must be reachable by OpenAI, e.g. through an Azure Dev Tunnel or other reverse proxy.
-2. **Provide the OpenAPI spec URL**: tell GPT Actions to use `https://<your-domain>/openapi.json`.
-3. **Available endpoints**: all actions live under `/actions/...` and return JSON envelopes. The OpenAPI spec (`openapi.yaml` / `openapi.json`) describes each route and mirrors the existing MCP tools.
-4. **Agent instructions**: Use the generated `agent_instructions.md` (full) as a knowledge file and `agent_instructions_simple.md` (quick reference) as system instruction. See [Configuration System](#configuration-system) section for details on generating these files.
-
-You can verify the setup locally:
-
 ```bash
-curl http://localhost:8000/openapi.json | jq '.paths | keys'
-curl http://localhost:8000/actions/projects
+git clone https://github.com/mmerah/PolarionMcp.git
+cd PolarionMcp
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
 ```
 
-## Configuration System
+Create a `.env` file:
+```env
+POLARION_URL=https://your-polarion-instance.com/polarion
+POLARION_USER=your-username
+POLARION_TOKEN=your-personal-access-token
+```
 
-The server supports an optional configuration file that provides:
-- **Project aliases**: Use friendly names instead of cryptic project IDs
-- **Plan project marking**: Identify projects that use plans (releases/iterations)
-- **Pre-defined work item types**: Eliminate repeated discovery calls
-- **Custom field mappings**: Define project-specific fields
-- **Named queries**: Create reusable, project-specific searches
+## CLI Usage
 
-### XML Custom Fields Parser
+```bash
+# Connection
+mcp-polarion health
 
-For quick configuration of custom fields from Polarion XML exports, see [XML_PARSER.md](XML_PARSER.md).
+# Projects
+mcp-polarion projects                               # list all configured aliases
+mcp-polarion project           -p myproject         # name & description
+mcp-polarion project-types     -p myproject         # configured work item types + fields
+mcp-polarion named-queries     -p myproject         # named queries defined in config
+mcp-polarion discover-types    -p myproject         # sample the project to find types
+mcp-polarion discover-types    -p myproject --limit 500
 
-### Setting Up Configuration
+# Work items
+mcp-polarion get ADC-1234                           # project inferred from ID prefix
+mcp-polarion get ADC-1234       -p myproject
+mcp-polarion search "type:defect AND status:open"  -p myproject
+mcp-polarion search "query:open_bugs"              -p myproject   # named query
+mcp-polarion search "type:defect"  -p myproject --fields "id,title,status,customFields.severity"
 
-1. Copy the example configuration:
-   ```bash
-   cp polarion_config.example.yaml polarion_config.yaml
-   ```
+# Tests & documents
+mcp-polarion test-runs          -p myproject
+mcp-polarion test-run  TR-42    -p myproject
+mcp-polarion documents          -p myproject
+mcp-polarion test-specs QA/TestSpecs  -p myproject
 
-2. Edit `polarion_config.yaml` to define your projects:
-   ```yaml
-   projects:
-     # Regular project
-     webstore:  # Your alias
-       id: WEBSTORE_V3  # Actual Polarion ID
-       work_item_types:
-         - systemRequirement
-         - specification
-         - defect
-       default_queries:
-         open_bugs: "type:defect AND status:open"
-         my_items: "assignee.id:$current_user"
-     
-     # Plan-based project (for releases/iterations)
-     releases:
-       id: RELEASES_PROJECT
-       is_plan: true  # Mark as plan project
-       work_item_types:
-         - feature
-         - userStory
-         - task
-   ```
+# Plans (plan projects only)
+mcp-polarion plans              -p releases
+mcp-polarion plan      R2024.4  -p releases
+mcp-polarion plan-workitems R2024.4  -p releases
+mcp-polarion search-plans "templateId:release"  -p releases
 
-3. **Generate agent instructions** (required after configuration):
-   ```bash
-   python -m mcp_server.docgen
-   ```
+# Servers
+mcp-polarion serve                          # HTTP — Cline / Claude Code
+mcp-polarion serve --mode copilot           # Microsoft Copilot Studio
+mcp-polarion serve --mode gpt               # HTTP + GPT Actions REST routes
+mcp-polarion serve --mode stdio             # stdio transport (.mcp.json)
+mcp-polarion serve --port 9000 --log-level DEBUG
 
-   This generates two files based on your `polarion_config.yaml`:
-   - `agent_instructions.md` - Full detailed instructions
-   - `agent_instructions_simple.md` - Quick reference
+# Utilities
+mcp-polarion docgen                         # regenerate agent_instructions.md
+mcp-polarion generate-openapi               # regenerate openapi.yaml
+```
 
-   **Note**: These files are gitignored as they contain project-specific configuration. Always regenerate them after:
-   - Modifying `polarion_config.yaml`
-   - Changing project configurations
-   - Adding/removing tools
+The convenience script `run_server.sh` handles first-time venv setup and `.env` checks before calling `mcp-polarion serve`.
 
-4. Use aliases in all tool calls:
-   ```
-   # Instead of: get_project_info("WEBSTORE_V3")
-   # Use: get_project_info("webstore")
-   
-   # Named queries work automatically:
-   search_workitems("webstore", "query:open_bugs")
-   ```
+## Configuration
+
+The optional `polarion_config.yaml` unlocks project aliases, named queries, custom field mappings, and plan project support. Copy the example to get started:
+
+```bash
+cp polarion_config.example.yaml polarion_config.yaml
+```
+
+```yaml
+projects:
+  myproject:                          # alias (use this everywhere)
+    id: ACTUAL_PROJECT_ID             # real Polarion project ID
+    work_item_types:
+      - systemRequirement
+      - defect
+    custom_fields:
+      defect: [severity, foundIn]
+      systemRequirement: [acceptanceCriteria, riskRelevance]
+    default_queries:
+      open_bugs: "type:defect AND status:open"
+      my_items: "assignee.id:$current_user"
+
+  releases:
+    id: RELEASES_PROJECT
+    is_plan: true                     # enables plan-specific tools
+
+display_fields: [id, title, type, status, assignee]
+```
+
+After editing the config, regenerate the agent instructions:
+```bash
+mcp-polarion docgen
+```
+
+See [XML_PARSER.md](XML_PARSER.md) for importing custom field definitions from Polarion XML exports.
 
 ## Available Tools
 
-### Configuration Tools
-- **`list_projects`**: Show all configured project aliases (indicates which are plan projects)
-- **`get_project_types`**: Get configured work item types for a project
-- **`get_named_queries`**: List available named queries for a project
+### General
+| Tool | Description |
+|------|-------------|
+| `health_check` | Check Polarion connectivity |
+| `get_project_info` | Project name and description |
+| `list_projects` | All configured project aliases |
+| `get_project_types` | Configured work item types for a project |
+| `get_named_queries` | Named queries defined for a project |
+| `discover_work_item_types` | Sample a project to find its work item types |
 
-### Tool Usage Conventions for AI Agents
-- **Error format**: Strings starting with "❌" indicate errors
-- **Success format**: Human-readable strings with truncated lists (20-50 items max)
-- **Inputs**: `project_alias` accepts both aliases (e.g., `webstore`) and actual IDs (e.g., `MYPROJ`); `document_id` is `Space/DocumentID` (e.g., `QA/TestSpecs`)
-- **Plan Projects**: Some tools are specific to plan projects, others only work with regular projects
+### Work Items *(regular projects)*
+| Tool | Description |
+|------|-------------|
+| `get_workitem` | Full details for a single work item, including custom fields |
+| `search_workitems` | Lucene query search; accepts named queries (`query:open_bugs`) and optional `field_list` |
 
-### 1. `health_check`
-Checks the connection to the Polarion server.
-- **Returns**: Connection status message
+### Test & Documents
+| Tool | Description |
+|------|-------------|
+| `get_test_runs` | List all test runs |
+| `get_test_run` | Details of one test run |
+| `get_documents` | List documents in a project |
+| `get_test_specs_from_document` | Extract test spec IDs from a document |
 
-### 2. `get_project_info`
-Retrieves information about a Polarion project.
-- **Parameters**: 
-  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
-- **Returns**: Project name and description
+### Plans *(plan projects only)*
+| Tool | Description |
+|------|-------------|
+| `get_plans` | List all plans (releases, iterations) |
+| `get_plan` | Details of one plan |
+| `get_plan_workitems` | Work items in a plan |
+| `search_plans` | Lucene search across plans |
 
-### 3. `get_workitem` *(Regular Projects Only)*
-Gets detailed information about a specific work item.
-- **Parameters**:
-  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
-  - `workitem_id`: The ID of the work item (e.g., "PROJ-123")
-- **Returns**: Work item details including title, type, status, author, dates
-- **Note**: Not supported for plan projects - use `get_plan_workitems` instead
+**Inputs**: `project_alias` accepts both aliases (`myproject`) and real IDs (`ACTUAL_PROJECT_ID`).  
+**Outputs**: Human-readable strings. Errors start with `❌`.
 
-### 4. `search_workitems` *(Regular Projects Only)*
-Searches for work items using Lucene query syntax or named queries.
-- **Parameters**:
-  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
-  - `query`: Lucene query or named query (e.g., "query:open_bugs")
-  - `field_list`: Optional comma-separated list of fields to return
-- **Returns**: List of matching work items
-- **Note**: Not supported for plan projects - use `get_plan_workitems` instead
+## MCP Server Integration
 
-**Query Syntax**: Uses Apache Lucene query syntax with Polarion-specific fields. For comprehensive query syntax documentation, see the [official Siemens Polarion documentation](https://docs.sw.siemens.com/en-US/doc/230235217/PL20190701144002440.xid1465510/xid1570724) and [Apache Lucene Query Parser Syntax](https://lucene.apache.org/core/2_9_4/queryparsersyntax.html).
+### Cline / Claude Code (HTTP transport)
 
-### 5. `get_test_runs`
-Retrieves all test runs in a project.
-- **Parameters**:
-  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
-- **Returns**: List of test runs with ID, title, and status
+```bash
+mcp-polarion serve          # starts on http://0.0.0.0:8000/mcp
+```
 
-### 6. `get_test_run`
-Gets details of a specific test run.
-- **Parameters**:
-  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
-  - `test_run_id`: The ID of the test run
-- **Returns**: Test run details including status, dates, and test case count
+Add to Cline's MCP settings:
+```json
+{
+  "mcpServers": {
+    "polarion": {
+      "url": "http://localhost:8000/mcp"
+    }
+  }
+}
+```
 
-### 7. `get_documents`
-Lists all documents in a project.
-- **Parameters**:
-  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
-- **Returns**: List of documents with ID, title, and location
+### Claude Code / `.mcp.json` (stdio transport)
 
-### 8. `get_test_specs_from_document`
-Extracts test specification IDs from a document.
-- **Parameters**:
-  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
-  - `document_id`: The ID of the document (format: `Space/DocumentID`)
-- **Returns**: List of test specification IDs found in the document
+```json
+{
+  "mcpServers": {
+    "polarion": {
+      "command": "mcp-polarion",
+      "args": ["serve", "--mode", "stdio"]
+    }
+  }
+}
+```
 
-### 9. `discover_work_item_types`
-Discovers available work item types in a project.
-- **Parameters**:
-  - `project_alias`: Project alias or ID (e.g., "webstore" or "MYPROJ")
-  - `limit`: Maximum number of work items to sample (default: 1000)
-- **Returns**: List of work item types with occurrence counts
+### Microsoft Copilot Studio
 
-## Plan-Specific Tools
+```bash
+mcp-polarion serve --mode copilot
+```
 
-These tools only work with projects configured with `is_plan: true`:
+Expose the server over HTTPS (e.g. Azure Dev Tunnel), then follow the [MCP onboarding wizard](https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-add-existing-server-to-agent): **Add a tool → New tool → Model Context Protocol**. Use `https://<your-host>/mcp` as the server URL and set the description to something meaningful — Copilot Studio's orchestrator uses it to decide when to invoke your server.
 
-### 10. `get_plans`
-Lists all plans (releases, iterations) in a plan project.
-- **Parameters**:
-  - `project_alias`: Project alias or ID (must be a plan project)
-- **Returns**: List of plans with ID, name, and template type
+`copilot` mode applies CORS and `CopilotStudioIDFix` middleware, which normalises JSON-RPC response IDs to match the type Copilot Studio sends in requests (string vs integer mismatch causes dropped responses).
 
-### 11. `get_plan`
-Gets detailed information about a specific plan.
-- **Parameters**:
-  - `project_alias`: Project alias or ID (must be a plan project)
-  - `plan_id`: The ID of the plan (e.g., "R2024.4" or "Sprint23")
-- **Returns**: Plan details including name, dates, template, allowed types
+### GPT Actions (OpenAI)
 
-### 12. `get_plan_workitems`
-Gets all work items in a specific plan.
-- **Parameters**:
-  - `project_alias`: Project alias or ID (must be a plan project)
-  - `plan_id`: The ID of the plan
-- **Returns**: List of work items in the plan
+```bash
+mcp-polarion serve --mode gpt
+```
 
-### 13. `search_plans`
-Searches for plans using Lucene query syntax.
-- **Parameters**:
-  - `project_alias`: Project alias or ID (must be a plan project)
-  - `query`: Lucene query (e.g., "templateId:release", "parent.id:R2024")
-- **Returns**: List of matching plans
+This mode adds REST endpoints under `/actions/` for every MCP tool. The OpenAPI spec at `/openapi.json` (or `openapi.yaml` in the repo root) describes all routes.
 
-## MCP Resources
+```bash
+# Regenerate the spec after adding/removing tools
+mcp-polarion generate-openapi
 
-- **`polarion://project/{project_id}`**: Access project information as a resource
+# Verify locally
+curl http://localhost:8000/actions/projects
+curl http://localhost:8000/openapi.json | jq '.paths | keys'
+```
 
-## MCP Prompts
-
-- **`analyze_project`**: Generate analysis prompt for a project
-- **`workitem_analysis`**: Generate analysis prompt for a specific work item
-
-## Microsoft Copilot Studio Integration
-
-### Public URL Configuration
-
-For the server to be accessible by Microsoft Copilot Studio, you need a public URL:
-
-- **Development**: Use VSCode port forwarding with Public visibility
-- **Production**: Deploy to a cloud service like Azure
-
-The server endpoint will be at: `https://your-public-url/mcp/`
-
-### Integration Steps
-
-1. **Ensure Server is Running**
-   The server must be accessible at the public URL above.
-
-2. **OpenAPI Specification**
-   The `openapi.copilot.yaml` file is pre-configured with:
-   - Correct host URL
-   - MCP protocol specification: `x-ms-agentic-protocol: mcp-streamable-1.0`
-   - Proper endpoint configuration
-
-3. **Add to Copilot Studio**
-   For detailed instructions on adding MCP servers to Microsoft Copilot Studio, refer to the official Microsoft documentation:
-   https://github.com/microsoft/mcsmcp/blob/main/README.md
-
-4. **Test Your Integration**
-   Example prompts for Copilot Studio:
-   - "Check the health of the Polarion connection"
-   - "Get information about the MyProject project"
-   - "Search for open defects in the WebApp project"
-   - "Show me test runs in the QA project"
-   - "Find all requirements assigned to john.doe in the Development project"
-
-## Using with Cline
-
-This server can also be used with [Cline](https://github.com/cline/cline) (VSCode extension) by running it in SSE transport mode:
-
-1. **Run the Cline-compatible server**
-   ```bash
-   ./run_server_cline.sh
-   ```
-   This starts the server with SSE transport on `http://localhost:8000/mcp`
-
-2. **Configure Cline**
-   - Open VSCode with Cline extension
-   - Click Cline icon → Menu (⋮) → MCP Servers
-   - Go to "Remote Servers" tab
-   - Add server with:
-     - Name: `polarion`
-     - URL: `http://localhost:8000/mcp`
-   
-   Or edit `cline_mcp_settings.json`:
-   ```json
-   {
-       "mcpServers": {
-           "polarion": {
-               "url": "http://localhost:8000/mcp",
-               "disabled": false,
-               "autoApprove": ["health_check", "get_project_info"]
-           }
-       }
-   }
-   ```
-
-3. **Use with Cline**
-   - Ask Cline to interact with Polarion:
-     - "Check my Polarion connection"
-     - "Search for open bugs in project XYZ"
-     - "Get test run results from Polarion"
-     - "Show me all requirements in project ABC"
+Use `agent_instructions.md` as a knowledge file and `agent_instructions_simple.md` as the system prompt for your custom GPT.
 
 ## Project Structure
 
 ```
-PolarionMcp/
-├── mcp_server/          # MCP server implementation
-│   ├── __init__.py
-│   ├── main.py         # Server entry point
-│   ├── tools.py        # MCP tool definitions
-│   ├── middleware.py   # Copilot Studio compatibility layer
-│   ├── config.py       # Project alias and query configuration
-│   ├── helpers.py      # Helper functions for formatting tool outputs
-│   └── settings.py     # Environment and configuration loading
-├── lib/                 # Core libraries
-│   └── polarion/
-│       └── polarion_driver.py  # Polarion API wrapper
-├── polarion_config.example.yaml  # Configuration template
-├── openapi.yaml        # OpenAPI specification with HTTP actions (GPT Actions)
-├── openapi.copilot.yaml # OpenAPI specification for Copilot Studio
-├── run_server.sh       # Convenience startup script
-├── pyproject.toml      # Python package configuration
-├── .env.example        # Environment variables template
-├── WORKFLOW_EXAMPLES.md # Usage patterns and examples. Customize and use as system instructions for your AI Agent.
-└── README.md           # This file
+polarion_mcp/
+  core/           Polarion domain logic — client, config, settings, formatters
+  mcp/            MCP layer — tool definitions, middleware, server factory, stdio
+  gpt_actions/    GPT Actions REST routes and OpenAPI spec generation
+  docgen/         Agent instruction doc generator
+  cli/            CLI entry point (mcp-polarion)
+tests/
+scripts/
+  parse_custom_fields.py   Import custom fields from Polarion XML exports
+run_server.sh              First-time bootstrapper (venv + deps + serve)
+polarion_config.example.yaml
 ```
 
 ## Development
 
-### Running Tests
 ```bash
-pytest
+pytest                      # run tests
+black polarion_mcp tests
+isort polarion_mcp tests
+mypy polarion_mcp
 ```
-
-### Code Formatting
-```bash
-black mcp_server lib
-isort mcp_server lib
-```
-
-### Type Checking
-```bash
-mypy mcp_server lib
-```
-
-## Troubleshooting
-
-### Connection Issues
-- Verify your Polarion URL is correct and accessible (notably use '/mcp/' and not '/mcp')
-- Ensure your personal access token has sufficient permissions
-- Check that the `.env` file is properly configured
-
-### Copilot Studio Integration
-- Confirm your public URL is accessible
-- Verify the server is running on port 8000
-- Check server logs for any middleware-related errors
-- Consult the official Microsoft MCP documentation: https://github.com/microsoft/mcsmcp
-
-### Common Errors
-- "Invalid credentials": Check your username and token
-- "Project not found": Verify the project ID exists in Polarion
-- "Work item not found": Ensure the work item ID includes the project prefix
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+MIT — see [LICENSE](LICENSE).

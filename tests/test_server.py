@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from mcp_server.settings import PolarionSettings
+from polarion_mcp.core.settings import PolarionSettings
 
 
 class TestTools:
@@ -28,7 +28,7 @@ class TestTools:
     @pytest.fixture
     def mock_driver(self):
         """Create a mock PolarionDriver."""
-        with patch("mcp_server.tools.PolarionDriver") as mock_driver_class:
+        with patch("polarion_mcp.mcp.tools.PolarionDriver") as mock_driver_class:
             mock_driver_instance = Mock()
             mock_driver_class.return_value.__enter__.return_value = mock_driver_instance
             mock_driver_class.return_value.__exit__.return_value = None
@@ -37,41 +37,39 @@ class TestTools:
     @pytest.mark.asyncio
     async def test_health_check_success(self, mock_settings, mock_driver):
         """Test health check with successful connection."""
-        # Import the actual function, not the decorated tool
-        import mcp_server.tools
+        import polarion_mcp.mcp.tools
 
-        with patch("mcp_server.tools.settings", mock_settings):
-            # Call the actual function directly
-            result = await mcp_server.tools.health_check.fn()
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            result = await polarion_mcp.mcp.tools.health_check.fn()
             assert "✅ Polarion connection is healthy." in result
 
     @pytest.mark.asyncio
     async def test_health_check_failure(self, mock_settings):
         """Test health check with connection failure."""
-        import mcp_server.tools
-        from lib.polarion.polarion_driver import PolarionConnectionException
+        import polarion_mcp.mcp.tools
+        from polarion_mcp.core.client import PolarionConnectionException
 
-        with patch("mcp_server.tools.settings", mock_settings):
-            with patch("mcp_server.tools.PolarionDriver") as mock_driver_class:
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            with patch("polarion_mcp.mcp.tools.PolarionDriver") as mock_driver_class:
                 mock_driver_class.return_value.__enter__.side_effect = (
                     PolarionConnectionException("Connection failed")
                 )
 
-                result = await mcp_server.tools.health_check.fn()
+                result = await polarion_mcp.mcp.tools.health_check.fn()
                 assert "❌ Polarion connection failed:" in result
 
     @pytest.mark.asyncio
     async def test_get_project_info(self, mock_settings, mock_driver):
         """Test get_project_info tool."""
-        import mcp_server.tools
+        import polarion_mcp.mcp.tools
 
         mock_driver.get_project_info.return_value = {
             "name": "Test Project",
             "description": "A test project",
         }
 
-        with patch("mcp_server.tools.settings", mock_settings):
-            result = await mcp_server.tools.get_project_info.fn("TEST_PROJECT")
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            result = await polarion_mcp.mcp.tools.get_project_info.fn("TEST_PROJECT")
 
             assert "Project Information for 'TEST_PROJECT'" in result
             assert "Name: Test Project" in result
@@ -81,7 +79,7 @@ class TestTools:
     @pytest.mark.asyncio
     async def test_get_workitem(self, mock_settings, mock_driver):
         """Test get_workitem tool."""
-        import mcp_server.tools
+        import polarion_mcp.mcp.tools
 
         mock_item = Mock()
         mock_item.id = "TEST-123"
@@ -94,8 +92,8 @@ class TestTools:
 
         mock_driver.get_workitem.return_value = mock_item
 
-        with patch("mcp_server.tools.settings", mock_settings):
-            result = await mcp_server.tools.get_workitem.fn("TEST_PROJECT", "TEST-123")
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            result = await polarion_mcp.mcp.tools.get_workitem.fn("TEST_PROJECT", "TEST-123")
 
             assert "Work Item Details for 'TEST-123'" in result
             assert "ID: TEST-123" in result
@@ -106,7 +104,7 @@ class TestTools:
     @pytest.mark.asyncio
     async def test_search_workitems(self, mock_settings, mock_driver):
         """Test search_workitems tool."""
-        import mcp_server.tools
+        import polarion_mcp.mcp.tools
 
         # Mock driver now returns dictionaries with only requested fields
         mock_driver.search_workitems.return_value = [
@@ -114,8 +112,8 @@ class TestTools:
             {"id": "TEST-124", "title": "Test Item 2"}
         ]
 
-        with patch("mcp_server.tools.settings", mock_settings):
-            result = await mcp_server.tools.search_workitems.fn(
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            result = await polarion_mcp.mcp.tools.search_workitems.fn(
                 "TEST_PROJECT", "type:requirement", "id,title"
             )
 
@@ -129,14 +127,14 @@ class TestTools:
     @pytest.mark.asyncio
     async def test_get_test_runs(self, mock_settings, mock_driver):
         """Test get_test_runs tool."""
-        import mcp_server.tools
+        import polarion_mcp.mcp.tools
 
         mock_run1 = Mock(id="TR-1", title="Test Run 1", status="passed")
         mock_run2 = Mock(id="TR-2", title="Test Run 2", status="failed")
         mock_driver.get_test_runs.return_value = [mock_run1, mock_run2]
 
-        with patch("mcp_server.tools.settings", mock_settings):
-            result = await mcp_server.tools.get_test_runs.fn("TEST_PROJECT")
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            result = await polarion_mcp.mcp.tools.get_test_runs.fn("TEST_PROJECT")
 
             assert "Found 2 test runs" in result
             assert "TR-1" in result
@@ -145,14 +143,14 @@ class TestTools:
     @pytest.mark.asyncio
     async def test_get_documents(self, mock_settings, mock_driver):
         """Test get_documents tool."""
-        import mcp_server.tools
+        import polarion_mcp.mcp.tools
 
         mock_doc1 = Mock(id="DOC-1", title="Document 1", moduleFolder="Specs")
         mock_doc2 = Mock(id="DOC-2", title="Document 2", moduleFolder="Tests")
         mock_driver.get_documents.return_value = [mock_doc1, mock_doc2]
 
-        with patch("mcp_server.tools.settings", mock_settings):
-            result = await mcp_server.tools.get_documents.fn("TEST_PROJECT")
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            result = await polarion_mcp.mcp.tools.get_documents.fn("TEST_PROJECT")
 
             assert "Found 2 documents" in result
             assert "DOC-1" in result
@@ -161,8 +159,8 @@ class TestTools:
     @pytest.mark.asyncio
     async def test_search_workitems_with_named_query(self, mock_settings, mock_driver):
         """Test search_workitems with named query resolution."""
-        import mcp_server.tools
-        from mcp_server.config import ConfigManager
+        import polarion_mcp.mcp.tools
+        from polarion_mcp.core.config import ConfigManager
 
         # Mock config manager with named query
         mock_config = Mock(spec=ConfigManager)
@@ -176,9 +174,9 @@ class TestTools:
             {"id": "TEST-123", "title": "Bug 1", "type": {"id": "defect"}, "status": {"id": "open"}}
         ]
 
-        with patch("mcp_server.tools.settings", mock_settings):
-            with patch("mcp_server.tools.config_manager", mock_config):
-                result = await mcp_server.tools.search_workitems.fn(
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            with patch("polarion_mcp.mcp.tools.config_manager", mock_config):
+                result = await polarion_mcp.mcp.tools.search_workitems.fn(
                     "webstore", "query:open_bugs"
                 )
 
@@ -193,8 +191,8 @@ class TestTools:
         self, mock_settings, mock_driver
     ):
         """Test search_workitems with explicitly provided field list."""
-        import mcp_server.tools
-        from mcp_server.config import ConfigManager
+        import polarion_mcp.mcp.tools
+        from polarion_mcp.core.config import ConfigManager
 
         # Mock config manager
         mock_config = Mock(spec=ConfigManager)
@@ -211,17 +209,17 @@ class TestTools:
         mock_driver.search_workitems.return_value = [
             {
                 "id": "TEST-123",
-                "title": "Bug 1", 
+                "title": "Bug 1",
                 "status": {"id": "open"},
                 "customFields.severity": "high",
                 "customFields.foundIn": "v1.2"
             }
         ]
 
-        with patch("mcp_server.tools.settings", mock_settings):
-            with patch("mcp_server.tools.config_manager", mock_config):
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            with patch("polarion_mcp.mcp.tools.config_manager", mock_config):
                 # Explicitly provide field list including custom fields
-                result = await mcp_server.tools.search_workitems.fn(
+                result = await polarion_mcp.mcp.tools.search_workitems.fn(
                     "webstore",
                     "type:defect AND status:open",
                     "id,title,status,customFields.severity,customFields.foundIn",
@@ -238,8 +236,8 @@ class TestTools:
     @pytest.mark.asyncio
     async def test_project_alias_resolution(self, mock_settings, mock_driver):
         """Test that project aliases are resolved to actual IDs."""
-        import mcp_server.tools
-        from mcp_server.config import ConfigManager
+        import polarion_mcp.mcp.tools
+        from polarion_mcp.core.config import ConfigManager
 
         # Mock config manager with alias resolution
         mock_config = Mock(spec=ConfigManager)
@@ -253,9 +251,9 @@ class TestTools:
             "description": "E-commerce platform",
         }
 
-        with patch("mcp_server.tools.settings", mock_settings):
-            with patch("mcp_server.tools.config_manager", mock_config):
-                result = await mcp_server.tools.get_project_info.fn("webstore")
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            with patch("polarion_mcp.mcp.tools.config_manager", mock_config):
+                result = await polarion_mcp.mcp.tools.get_project_info.fn("webstore")
 
                 assert "WEBSTORE_V3" in result
                 assert "alias: webstore" in result
