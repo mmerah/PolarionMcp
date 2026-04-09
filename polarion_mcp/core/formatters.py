@@ -110,19 +110,34 @@ def _extract_linked_workitems(item: Any) -> List[Tuple[str, str, str]]:
     if hasattr(item, "linkedWorkItems") and item.linkedWorkItems is not None:
         try:
             for linked in item.linkedWorkItems.LinkedWorkItem:
-                role_id = getattr(linked.role, "id", "unknown") if linked.role else "unknown"
-                target_id = _parse_workitem_id_from_uri(linked.workItemURI) if linked.workItemURI else None
+                role_id = (
+                    getattr(linked.role, "id", "unknown") if linked.role else "unknown"
+                )
+                target_id = (
+                    _parse_workitem_id_from_uri(linked.workItemURI)
+                    if linked.workItemURI
+                    else None
+                )
                 if target_id:
                     links.append((role_id, target_id, "out"))
         except (AttributeError, TypeError):
             pass
 
     # Back links (incoming / derived)
-    if hasattr(item, "linkedWorkItemsDerived") and item.linkedWorkItemsDerived is not None:
+    if (
+        hasattr(item, "linkedWorkItemsDerived")
+        and item.linkedWorkItemsDerived is not None
+    ):
         try:
             for linked in item.linkedWorkItemsDerived.LinkedWorkItem:
-                role_id = getattr(linked.role, "id", "unknown") if linked.role else "unknown"
-                target_id = _parse_workitem_id_from_uri(linked.workItemURI) if linked.workItemURI else None
+                role_id = (
+                    getattr(linked.role, "id", "unknown") if linked.role else "unknown"
+                )
+                target_id = (
+                    _parse_workitem_id_from_uri(linked.workItemURI)
+                    if linked.workItemURI
+                    else None
+                )
                 if target_id:
                     links.append((role_id, target_id, "in"))
         except (AttributeError, TypeError):
@@ -370,7 +385,9 @@ def format_discovered_types(
     ):
         output += f"- {type_name}: {count} occurrences\n"
 
-    output += f"\n💡 Tip: Add these types to polarion_config.yaml to avoid repeated discovery."
+    output += (
+        "\n💡 Tip: Add these types to polarion_config.yaml to avoid repeated discovery."
+    )
 
     return output
 

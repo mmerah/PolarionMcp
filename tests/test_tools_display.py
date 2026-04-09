@@ -1,7 +1,9 @@
 """Test the field display functionality in tools.py"""
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
+
 from polarion_mcp.core.config import ConfigManager
 
 

@@ -1,6 +1,6 @@
 # mcp-polarion
 
-A CLI-first Polarion ALM client with MCP server support for AI assistants (Cline, Claude Code, Copilot Studio) and OpenAI GPT Actions.
+A CLI-first Polarion ALM client with MCP server support for AI assistants (Cline, Claude Code, Copilot Studio) and a REST API for OpenAI GPT Actions and other HTTP consumers.
 
 ## Installation
 
@@ -25,40 +25,40 @@ POLARION_TOKEN=your-personal-access-token
 mcp-polarion health
 
 # Projects
-mcp-polarion projects                               # list all configured aliases
-mcp-polarion project           -p myproject         # name & description
-mcp-polarion project-types     -p myproject         # configured work item types + fields
-mcp-polarion named-queries     -p myproject         # named queries defined in config
-mcp-polarion discover-types    -p myproject         # sample the project to find types
-mcp-polarion discover-types    -p myproject --limit 500
+mcp-polarion projects                       # list all configured aliases
+mcp-polarion project -p myproject           # name & description
+mcp-polarion project-types -p myproject     # configured work item types + fields
+mcp-polarion named-queries -p myproject     # named queries defined in config
+mcp-polarion discover-types -p myproject    # sample the project to find types
+mcp-polarion discover-types -p myproject --limit 500
 
 # Work items
-mcp-polarion get ADC-1234                           # project inferred from ID prefix
-mcp-polarion get ADC-1234       -p myproject
-mcp-polarion search "type:defect AND status:open"  -p myproject
-mcp-polarion search "query:open_bugs"              -p myproject   # named query
-mcp-polarion search "type:defect"  -p myproject --fields "id,title,status,customFields.severity"
+mcp-polarion get ADC-1234                   # project inferred from ID prefix
+mcp-polarion get ADC-1234 -p myproject
+mcp-polarion search "type:defect AND status:open" -p myproject
+mcp-polarion search "query:open_bugs" -p myproject  # named query
+mcp-polarion search "type:defect" -p myproject --fields "id,title,status,customFields.severity"
 
 # Tests & documents
-mcp-polarion test-runs          -p myproject
-mcp-polarion test-run  TR-42    -p myproject
-mcp-polarion documents          -p myproject
-mcp-polarion test-specs QA/TestSpecs  -p myproject
+mcp-polarion test-runs -p myproject
+mcp-polarion test-run TR-42 -p myproject
+mcp-polarion documents -p myproject
+mcp-polarion test-specs QA/TestSpecs -p myproject
 
 # Plans (plan projects only)
-mcp-polarion plans              -p releases
-mcp-polarion plan      R2024.4  -p releases
-mcp-polarion plan-workitems R2024.4  -p releases
-mcp-polarion search-plans "templateId:release"  -p releases
+mcp-polarion plans -p releases
+mcp-polarion plan R2024.4 -p releases
+mcp-polarion plan-workitems R2024.4 -p releases
+mcp-polarion search-plans "templateId:release" -p releases
 
 # Servers
-mcp-polarion serve                          # HTTP — works for all clients
+mcp-polarion serve                          # HTTP works for all clients
 mcp-polarion serve --mode stdio             # stdio transport (.mcp.json)
 mcp-polarion serve --port 9000 --log-level DEBUG
 
-# Utilities
-mcp-polarion docgen                         # regenerate agent_instructions.md
-mcp-polarion generate-openapi               # regenerate openapi.yaml
+# Utilities. Output goes to generated/
+mcp-polarion docgen                         # generated/agent_instructions*.md
+mcp-polarion generate-openapi               # generated/openapi.yaml
 ```
 
 The convenience script `run_server.sh` handles first-time venv setup and `.env` checks before calling `mcp-polarion serve`.
@@ -92,9 +92,10 @@ projects:
 display_fields: [id, title, type, status, assignee]
 ```
 
-After editing the config, regenerate the agent instructions:
+After editing the config, regenerate the agent instructions and OpenAPI spec:
 ```bash
-mcp-polarion docgen
+mcp-polarion docgen                         # generated/agent_instructions*.md
+mcp-polarion generate-openapi               # generated/openapi.yaml
 ```
 
 See [XML_PARSER.md](XML_PARSER.md) for importing custom field definitions from Polarion XML exports.
@@ -138,7 +139,7 @@ See [XML_PARSER.md](XML_PARSER.md) for importing custom field definitions from P
 
 ## MCP Server Integration
 
-A single `mcp-polarion serve` command serves all HTTP clients. The server uses stateless requests (one session per POST) and JSON responses, which enables parallel tool calls and works equally well with Cline, Claude Code, Copilot Studio, and GPT Actions.
+A single `mcp-polarion serve` command serves all HTTP clients. The server uses stateless requests (one session per POST) and JSON responses, which enables parallel tool calls and works equally well with Cline, Claude Code, Copilot Studio, and GPT Actions (via the REST API).
 
 ### Cline / Claude Code (HTTP)
 
@@ -176,30 +177,38 @@ mcp-polarion serve
 
 Expose over HTTPS (e.g. Azure Dev Tunnel), then follow the [MCP onboarding wizard](https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-add-existing-server-to-agent): **Add a tool → New tool → Model Context Protocol**. Use `https://<your-host>/mcp` as the server URL.
 
-### GPT Actions (OpenAI)
+### REST API / GPT Actions (OpenAI)
 
 ```bash
 mcp-polarion serve
 ```
 
-REST endpoints are available at `/actions/` alongside the MCP endpoint. The OpenAPI spec at `/openapi.json` (or regenerate with `mcp-polarion generate-openapi`) describes all routes.
+REST endpoints are available at `/actions/` alongside the MCP endpoint. Generate the OpenAPI spec and agent instructions first:
+
+```bash
+mcp-polarion generate-openapi               # generated/openapi.yaml
+mcp-polarion docgen                         # generated/agent_instructions*.md
+```
+
+The running server also serves the spec at `/openapi.json` and `/openapi.yaml`.
 
 ```bash
 curl http://localhost:8000/actions/projects
 curl http://localhost:8000/openapi.json | jq '.paths | keys'
 ```
 
-Use `agent_instructions.md` as a knowledge file and `agent_instructions_simple.md` as the system prompt for your custom GPT.
+Use `generated/agent_instructions.md` as a knowledge file and `generated/agent_instructions_simple.md` as the system prompt for your custom GPT.
 
 ## Project Structure
 
 ```
 polarion_mcp/
-  core/           Polarion domain logic — client, config, settings, formatters
-  mcp/            MCP layer — tool definitions, middleware, server factory, stdio
-  gpt_actions/    GPT Actions REST routes and OpenAPI spec generation
+  core/           Polarion domain logic: client, config, settings, formatters
+  mcp/            MCP layer: tool definitions, middleware, server, stdio
+  rest_api/       REST API routes and OpenAPI spec generation
   docgen/         Agent instruction doc generator
   cli/            CLI entry point (mcp-polarion)
+generated/        Generated files (openapi.yaml, agent_instructions)
 tests/
 scripts/
   parse_custom_fields.py   Import custom fields from Polarion XML exports
@@ -210,7 +219,7 @@ polarion_config.example.yaml
 ## Development
 
 ```bash
-pytest                      # run tests
+pytest
 black polarion_mcp tests
 isort polarion_mcp tests
 mypy polarion_mcp
@@ -218,4 +227,4 @@ mypy polarion_mcp
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

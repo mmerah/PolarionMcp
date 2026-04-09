@@ -1,50 +1,31 @@
 """
-HTTP server factory for polarion_mcp.
+HTTP server for polarion_mcp.
 
-A single HTTP mode works for all clients:
-- Cline / Claude Code  — standard MCP HTTP clients
-- Microsoft Copilot Studio — needs stateless requests, CORS, path normalisation
-- GPT Actions — uses the /actions/* REST routes registered alongside /mcp
+Uses FastMCP's built-in HTTP transport with two additional layers:
 
-stateless_http=True:  each POST gets its own session, enabling parallel tool calls.
-json_response=True:   JSON bodies instead of SSE streams (compatible with all clients).
-CORS:                 required for browser/cloud-based clients (Copilot Studio, etc.)
+- CORS middleware — required for browser/cloud-based clients (Copilot Studio, etc.)
+- MCPPathFix middleware — works around two client quirks:
+  1. Starlette redirects POST /mcp → /mcp/ with 307; POST clients don't follow
+     307 redirects, so we normalise the path before it reaches the router.
+  2. Starlette's Mount("/mcp") catches /.well-known/* requests and the MCP
+     handler returns 406, making clients think OAuth is misconfigured.
+     We return 404 immediately instead.
+
+The REST API routes (/actions/*) are registered via @mcp.custom_route()
+decorators in polarion_mcp.rest_api.routes; FastMCP automatically includes
+them alongside the /mcp endpoint.
 """
 
 import logging
 import sys
 
-import uvicorn
+import fastmcp
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
 from polarion_mcp.core.settings import settings
 from polarion_mcp.mcp.middleware import MCPPathFix
 from polarion_mcp.mcp.tools import mcp
-
-
-def create_app():
-    """Build and return the ASGI application."""
-    # Register GPT Actions REST routes (/actions/*)
-    import polarion_mcp.gpt_actions.routes  # noqa: F401
-
-    cors = [
-        Middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_headers=["*"],
-            allow_methods=["*"],
-            allow_credentials=False,
-        )
-    ]
-    app = mcp.http_app(
-        path="/mcp",
-        transport="streamable-http",
-        json_response=True,
-        stateless_http=True,
-        middleware=cors,
-    )
-    return MCPPathFix(app)  # type: ignore[return-value]
 
 
 def run(
@@ -57,13 +38,37 @@ def run(
     logger = logging.getLogger(__name__)
     _verify_settings(logger)
 
-    app = create_app()
+    # Side-effect import: registers @mcp.custom_route() REST endpoints
+    import polarion_mcp.rest_api.routes  # noqa: F401
+
+    middleware = [
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_headers=["*"],
+            allow_methods=["*"],
+            allow_credentials=False,
+        ),
+        Middleware(MCPPathFix),
+    ]
+
+    # json_response=True: JSON bodies instead of SSE streams (all clients)
+    fastmcp.settings.json_response = True
 
     logger.info(f"Starting Polarion MCP Server on http://{host}:{port}")
-    logger.info(f"MCP endpoint:          http://{host}:{port}/mcp")
-    logger.info(f"GPT Actions endpoints: http://{host}:{port}/actions/")
+    logger.info(f"MCP endpoint:      http://{host}:{port}/mcp")
+    logger.info(f"REST API endpoints: http://{host}:{port}/actions/")
 
-    uvicorn.run(app, host=host, port=port, log_level=log_level.lower())
+    mcp.run(
+        transport="streamable-http",
+        host=host,
+        port=port,
+        log_level=log_level,
+        path="/mcp",
+        stateless_http=True,
+        middleware=middleware,
+        show_banner=False,
+    )
 
 
 def _configure_logging(log_level: str) -> None:

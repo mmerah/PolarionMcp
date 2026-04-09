@@ -2,8 +2,6 @@
 
 from unittest.mock import Mock
 
-import pytest
-
 from polarion_mcp.core.config import ConfigManager
 from polarion_mcp.core.formatters import (
     extract_workitem_fields,
@@ -184,7 +182,11 @@ class TestFormatSearchResults:
         results = []
 
         output = format_search_results(
-            results, "query:open_bugs", "type:defect AND status:open", "TEST_PROJECT", ["id", "title"]
+            results,
+            "query:open_bugs",
+            "type:defect AND status:open",
+            "TEST_PROJECT",
+            ["id", "title"],
         )
 
         assert "No work items found in project 'TEST_PROJECT'" in output
@@ -215,7 +217,12 @@ class TestFormatSearchResults:
         results = [{"id": f"TEST-{i}", "title": f"Item {i}"} for i in range(25)]
 
         output = format_search_results(
-            results, "type:all", "type:all", "TEST_PROJECT", ["id", "title"], max_items=20
+            results,
+            "type:all",
+            "type:all",
+            "TEST_PROJECT",
+            ["id", "title"],
+            max_items=20,
         )
 
         assert "Found 25 work items" in output
@@ -328,7 +335,10 @@ class TestWorkItemTypeHelpers:
 
         result = format_discovered_types(types_count, "TEST_PROJECT", 18)
 
-        assert "Discovered work item types in project 'TEST_PROJECT' (sampled 18 items):" in result
+        assert (
+            "Discovered work item types in project 'TEST_PROJECT' (sampled 18 items):"
+            in result
+        )
         assert "- defect: 10 occurrences" in result
         assert "- requirement: 5 occurrences" in result
         assert "- task: 3 occurrences" in result

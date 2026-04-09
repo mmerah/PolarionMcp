@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from textwrap import dedent
 from typing import Dict, Iterable, Literal
@@ -23,8 +22,8 @@ from fastmcp.tools.tool import FunctionTool
 from polarion_mcp.mcp.tools import mcp
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_FULL_PATH = REPO_ROOT / "agent_instructions.md"
-DEFAULT_SIMPLE_PATH = REPO_ROOT / "agent_instructions_simple.md"
+DEFAULT_FULL_PATH = REPO_ROOT / "generated" / "agent_instructions.md"
+DEFAULT_SIMPLE_PATH = REPO_ROOT / "generated" / "agent_instructions_simple.md"
 CONFIG_PATH = REPO_ROOT / "polarion_config.yaml"
 Variant = Literal["full", "simple"]
 
@@ -57,9 +56,7 @@ def _format_properties(schema: dict) -> Iterable[str]:
                 description = "—"
 
         required_flag = "yes" if name in required else "no"
-        lines.append(
-            f"| `{name}` | {type_repr} | {required_flag} | {description} |"
-        )
+        lines.append(f"| `{name}` | {type_repr} | {required_flag} | {description} |")
 
     return lines
 
@@ -118,8 +115,10 @@ def _generate_workflow_section() -> str:
         if proj_desc:
             lines.append(f"- **Description**: {proj_desc}")
         if is_plan:
-            lines.append(f"- **Type**: Plan-based project (supports plans/releases/iterations)")
-        lines.append(f"- **Configured Work Item Types**:")
+            lines.append(
+                "- **Type**: Plan-based project (supports plans/releases/iterations)"
+            )
+        lines.append("- **Configured Work Item Types**:")
         if work_item_types:
             for wit in work_item_types:
                 lines.append(f"  - `{wit}`")
@@ -127,100 +126,102 @@ def _generate_workflow_section() -> str:
             lines.append("  - _None configured (use discover_work_item_types)_")
         lines.append("")
 
-    lines.extend([
-        "### Standard Workflow Pattern",
-        "",
-        "When working with Polarion work items, follow this typical pattern:",
-        "",
-        "#### 1. Search for Work Items",
-        "",
-        "Use `search_workitems` to find items based on user intent. Construct queries by combining:",
-        "",
-        "- **Type filter**: Always specify work item type(s) from the configured list above",
-        "  - Example: `type:defect`, `type:systemRequirement`, `type:(userstory OR task)`",
-        "",
-        "- **User intent**: Translate natural language to Lucene query syntax",
-        "",
-        "  **Text Search (IMPORTANT)**:",
-        "  - ✅ `title:keyword*` - Search in work item titles (MOST COMMON)",
-        "  - ✅ `description:keyword*` - Search in descriptions",
-        "  - ✅ `keyword*` (no field prefix) - Free text search across multiple fields",
-        "  - ❌ `text:keyword*` - NOT VALID! Polarion has no 'text' field",
-        "",
-        "  **Other Filters**:",
-        "  - Status/field filters: `status:open`, `priority:high`, `assignee.id:john.doe`",
-        "  - Custom fields: Use field names directly, e.g., `severity:critical`, `importance:high`",
-        "  - Date ranges: `created:[$today - 7d$ TO $today$]`",
-        "  - Boolean logic: Combine with `AND`, `OR`, `NOT` (must be UPPERCASE)",
-        "",
-        "- **Field list**: Specify which standard fields to display in results",
-        "  - Default: `id,title,type,status,assignee`",
-        "  - Note: Custom fields cannot be retrieved via field_list (use get_workitem instead)",
-        "",
-        "**Query Construction Examples**:",
-        "",
-        "- User asks: _\"Show me open defects\"_",
-        "  - Query: `type:defect AND status:open`",
-        "  - Field list: `id,title,status,assignee,priority`",
-        "",
-        "- User asks: _\"Find component requirements with transparent in the title\"_",
-        "  - ❌ WRONG: `type:componentRequirement AND text:transparent*`",
-        "  - ✅ CORRECT: `type:componentRequirement AND title:transparent*`",
-        "  - Field list: `id,title,status`",
-        "",
-        "- User asks: _\"Find high-priority requirements about authentication\"_",
-        "  - Query: `type:systemRequirement AND priority:high AND title:authentication*`",
-        "  - Field list: `id,title,status,priority,assignee`",
-        "",
-        "- User asks: _\"Show unassigned user stories\"_",
-        "  - Query: `type:userstory AND NOT HAS_VALUE:assignee`",
-        "  - Field list: `id,title,status,created`",
-        "",
-        "#### 2. Explore Results",
-        "",
-        "After receiving search results, you have two options:",
-        "",
-        "- **Get detailed information**: Use `get_workitem` with specific work item IDs to retrieve:",
-        "  - Full descriptions and custom field values",
-        "  - Linked work items and traceability information",
-        "  - Complete metadata and history",
-        "",
-        "- **Ask for user direction**: Present the search results summary and ask the user:",
-        "  - \"Would you like me to show details for any specific work items?\"",
-        "  - \"Should I explore the linked requirements/tests for these items?\"",
-        "  - \"Do you want to refine the search with additional filters?\"",
-        "",
-        "#### 3. Follow-up Actions",
-        "",
-        "Based on the exploration, you may:",
-        "",
-        "- Fetch related items by following trace links (parent/child, linked items)",
-        "- Aggregate and summarize findings (counts by status, priority distribution)",
-        "- Query test runs, plans, or documents related to the work items",
-        "- Provide coverage analysis or gap identification",
-        "",
-        "### Common Pitfalls to Avoid",
-        "",
-        "1. **❌ Using `text:` field** - Polarion has NO `text` field!",
-        "   - Wrong: `type:defect AND text:login*`",
-        "   - Right: `type:defect AND title:login*`",
-        "",
-        "2. **❌ Lowercase boolean operators** - Must be UPPERCASE",
-        "   - Wrong: `type:defect and status:open`",
-        "   - Right: `type:defect AND status:open`",
-        "",
-        "3. **❌ Leading wildcards** - Cannot start search with `*`",
-        "   - Wrong: `title:*authentication`",
-        "   - Right: `title:authentication*`",
-        "",
-        "4. **❌ Requesting custom fields in field_list** - API limitation",
-        "   - Wrong: `field_list=\"id,title,severity\"` (severity is custom)",
-        "   - Right: Use `search_workitems` to find, then `get_workitem` for custom fields",
-        "",
-        "5. **❌ Missing type filter** - Too broad, slow queries",
-        "   - Wrong: `status:open` (searches all types)",
-        "   - Right: `type:defect AND status:open` (more specific)",
-    ])
+    lines.extend(
+        [
+            "### Standard Workflow Pattern",
+            "",
+            "When working with Polarion work items, follow this typical pattern:",
+            "",
+            "#### 1. Search for Work Items",
+            "",
+            "Use `search_workitems` to find items based on user intent. Construct queries by combining:",
+            "",
+            "- **Type filter**: Always specify work item type(s) from the configured list above",
+            "  - Example: `type:defect`, `type:systemRequirement`, `type:(userstory OR task)`",
+            "",
+            "- **User intent**: Translate natural language to Lucene query syntax",
+            "",
+            "  **Text Search (IMPORTANT)**:",
+            "  - ✅ `title:keyword*` - Search in work item titles (MOST COMMON)",
+            "  - ✅ `description:keyword*` - Search in descriptions",
+            "  - ✅ `keyword*` (no field prefix) - Free text search across multiple fields",
+            "  - ❌ `text:keyword*` - NOT VALID! Polarion has no 'text' field",
+            "",
+            "  **Other Filters**:",
+            "  - Status/field filters: `status:open`, `priority:high`, `assignee.id:john.doe`",
+            "  - Custom fields: Use field names directly, e.g., `severity:critical`, `importance:high`",
+            "  - Date ranges: `created:[$today - 7d$ TO $today$]`",
+            "  - Boolean logic: Combine with `AND`, `OR`, `NOT` (must be UPPERCASE)",
+            "",
+            "- **Field list**: Specify which standard fields to display in results",
+            "  - Default: `id,title,type,status,assignee`",
+            "  - Note: Custom fields cannot be retrieved via field_list (use get_workitem instead)",
+            "",
+            "**Query Construction Examples**:",
+            "",
+            '- User asks: _"Show me open defects"_',
+            "  - Query: `type:defect AND status:open`",
+            "  - Field list: `id,title,status,assignee,priority`",
+            "",
+            '- User asks: _"Find component requirements with transparent in the title"_',
+            "  - ❌ WRONG: `type:componentRequirement AND text:transparent*`",
+            "  - ✅ CORRECT: `type:componentRequirement AND title:transparent*`",
+            "  - Field list: `id,title,status`",
+            "",
+            '- User asks: _"Find high-priority requirements about authentication"_',
+            "  - Query: `type:systemRequirement AND priority:high AND title:authentication*`",
+            "  - Field list: `id,title,status,priority,assignee`",
+            "",
+            '- User asks: _"Show unassigned user stories"_',
+            "  - Query: `type:userstory AND NOT HAS_VALUE:assignee`",
+            "  - Field list: `id,title,status,created`",
+            "",
+            "#### 2. Explore Results",
+            "",
+            "After receiving search results, you have two options:",
+            "",
+            "- **Get detailed information**: Use `get_workitem` with specific work item IDs to retrieve:",
+            "  - Full descriptions and custom field values",
+            "  - Linked work items and traceability information",
+            "  - Complete metadata and history",
+            "",
+            "- **Ask for user direction**: Present the search results summary and ask the user:",
+            '  - "Would you like me to show details for any specific work items?"',
+            '  - "Should I explore the linked requirements/tests for these items?"',
+            '  - "Do you want to refine the search with additional filters?"',
+            "",
+            "#### 3. Follow-up Actions",
+            "",
+            "Based on the exploration, you may:",
+            "",
+            "- Fetch related items by following trace links (parent/child, linked items)",
+            "- Aggregate and summarize findings (counts by status, priority distribution)",
+            "- Query test runs, plans, or documents related to the work items",
+            "- Provide coverage analysis or gap identification",
+            "",
+            "### Common Pitfalls to Avoid",
+            "",
+            "1. **❌ Using `text:` field** - Polarion has NO `text` field!",
+            "   - Wrong: `type:defect AND text:login*`",
+            "   - Right: `type:defect AND title:login*`",
+            "",
+            "2. **❌ Lowercase boolean operators** - Must be UPPERCASE",
+            "   - Wrong: `type:defect and status:open`",
+            "   - Right: `type:defect AND status:open`",
+            "",
+            "3. **❌ Leading wildcards** - Cannot start search with `*`",
+            "   - Wrong: `title:*authentication`",
+            "   - Right: `title:authentication*`",
+            "",
+            "4. **❌ Requesting custom fields in field_list** - API limitation",
+            '   - Wrong: `field_list="id,title,severity"` (severity is custom)',
+            "   - Right: Use `search_workitems` to find, then `get_workitem` for custom fields",
+            "",
+            "5. **❌ Missing type filter** - Too broad, slow queries",
+            "   - Wrong: `status:open` (searches all types)",
+            "   - Right: `type:defect AND status:open` (more specific)",
+        ]
+    )
 
     return "\n".join(lines)
 
@@ -242,7 +243,6 @@ async def _collect_tools() -> Dict[str, FunctionTool]:
 
 async def generate_markdown(variant: Variant) -> str:
     tools = await _collect_tools()
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
 
     if variant == "simple":
         lines = [
@@ -256,11 +256,17 @@ async def generate_markdown(variant: Variant) -> str:
 
         for name, tool in tools.items():
             description = dedent(tool.description or "").strip()
-            summary = description.split("\n", 1)[0] if description else "No description provided."
+            summary = (
+                description.split("\n", 1)[0]
+                if description
+                else "No description provided."
+            )
             lines.append(f"- `{name}` – {summary}")
 
         lines.append("")
-        lines.append("Tip: Start with `list_projects`, then call the tool best suited to the user's question.")
+        lines.append(
+            "Tip: Start with `list_projects`, then call the tool best suited to the user's question."
+        )
 
         # Add workflow section
         workflow_section = _generate_workflow_section()
@@ -270,7 +276,7 @@ async def generate_markdown(variant: Variant) -> str:
         return "\n".join(lines)
 
     # Full variant
-    lines: list[str] = [
+    lines = [
         "# Polarion Agent Instructions",
         "",
         "## Overview",
@@ -302,7 +308,7 @@ async def generate_markdown(variant: Variant) -> str:
         "",
         "- Short, plain-language explanations focused on outcomes and decisions.",
         "- Use sections such as Summary, Key Findings, Evidence (tables/IDs), and Next Steps when appropriate.",
-        "- Offer optional next actions (e.g., \"Expand to linked defects?\", \"Open coverage gaps?\").",
+        '- Offer optional next actions (e.g., "Expand to linked defects?", "Open coverage gaps?").',
         "- Prefer tables or canvas sketches to images; primary data authority is the Polarion MCP connection.",
         "",
         "## Available Tools",
@@ -310,7 +316,9 @@ async def generate_markdown(variant: Variant) -> str:
     ]
 
     for name, tool in tools.items():
-        description = dedent(tool.description or "").strip() or "No description provided."
+        description = (
+            dedent(tool.description or "").strip() or "No description provided."
+        )
         lines.extend(
             [
                 f"### `{name}`",
@@ -352,7 +360,9 @@ def write_variant(variant: Variant, output: Path | None = None) -> Path:
 
 
 def main() -> list[Path]:
-    parser = argparse.ArgumentParser(description="Generate Polarion agent instruction Markdown.")
+    parser = argparse.ArgumentParser(
+        description="Generate Polarion agent instruction Markdown."
+    )
     parser.add_argument(
         "--variant",
         choices=["full", "simple", "all"],

@@ -31,16 +31,20 @@ class MCPPathFix:
 
         # /mcp/.well-known/* → 404
         if "/.well-known/" in path:
-            await send({
-                "type": "http.response.start",
-                "status": 404,
-                "headers": [(b"content-type", b"text/plain")],
-            })
-            await send({
-                "type": "http.response.body",
-                "body": b"Not Found",
-                "more_body": False,
-            })
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 404,
+                    "headers": [(b"content-type", b"text/plain")],
+                }
+            )
+            await send(
+                {
+                    "type": "http.response.body",
+                    "body": b"Not Found",
+                    "more_body": False,
+                }
+            )
             return
 
         # /mcp → /mcp/ (prevent 307 redirect)

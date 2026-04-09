@@ -7,10 +7,9 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 import yaml
 
-from polarion_mcp.core.config import ConfigManager, PolarionConfig, ProjectConfig
+from polarion_mcp.core.config import ConfigManager, PolarionConfig
 
 
 class TestConfigManager:
@@ -250,9 +249,7 @@ class TestConfigManager:
 
     def test_get_display_fields(self):
         """Test retrieving display fields."""
-        config_data = {
-            "display_fields": ["id", "title", "status", "assignee"]
-        }
+        config_data = {"display_fields": ["id", "title", "status", "assignee"]}
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(config_data, f)

@@ -93,7 +93,9 @@ class TestTools:
         mock_driver.get_workitem.return_value = mock_item
 
         with patch("polarion_mcp.mcp.tools.settings", mock_settings):
-            result = await polarion_mcp.mcp.tools.get_workitem.fn("TEST_PROJECT", "TEST-123")
+            result = await polarion_mcp.mcp.tools.get_workitem.fn(
+                "TEST_PROJECT", "TEST-123"
+            )
 
             assert "Work Item Details for 'TEST-123'" in result
             assert "ID: TEST-123" in result
@@ -109,7 +111,7 @@ class TestTools:
         # Mock driver now returns dictionaries with only requested fields
         mock_driver.search_workitems.return_value = [
             {"id": "TEST-123", "title": "Test Item 1"},
-            {"id": "TEST-124", "title": "Test Item 2"}
+            {"id": "TEST-124", "title": "Test Item 2"},
         ]
 
         with patch("polarion_mcp.mcp.tools.settings", mock_settings):
@@ -171,7 +173,12 @@ class TestTools:
 
         # Return only the fields from get_display_fields
         mock_driver.search_workitems.return_value = [
-            {"id": "TEST-123", "title": "Bug 1", "type": {"id": "defect"}, "status": {"id": "open"}}
+            {
+                "id": "TEST-123",
+                "title": "Bug 1",
+                "type": {"id": "defect"},
+                "status": {"id": "open"},
+            }
         ]
 
         with patch("polarion_mcp.mcp.tools.settings", mock_settings):
@@ -212,7 +219,7 @@ class TestTools:
                 "title": "Bug 1",
                 "status": {"id": "open"},
                 "customFields.severity": "high",
-                "customFields.foundIn": "v1.2"
+                "customFields.foundIn": "v1.2",
             }
         ]
 

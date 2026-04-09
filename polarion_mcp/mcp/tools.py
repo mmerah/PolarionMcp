@@ -1,5 +1,5 @@
 import logging
-import re
+from contextlib import contextmanager
 from typing import Optional
 
 from fastmcp import FastMCP
@@ -26,6 +26,49 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastMCP server instance
 mcp: FastMCP = FastMCP("polarion-mcp")
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+
+@contextmanager
+def _polarion_project(project_alias: str):
+    """Resolve alias, connect to Polarion, select project. Yields (driver, project_id)."""
+    actual_id = config_manager.resolve_project_id(project_alias)
+    with PolarionDriver(
+        url=settings.polarion_url,
+        user=settings.polarion_user,
+        token=settings.polarion_token,
+    ) as driver:
+        driver.select_project(actual_id)
+        yield driver, actual_id
+
+
+def _require_plan_project(project_alias: str) -> str | None:
+    """Return error string if project is NOT a plan project, else None."""
+    actual_id = config_manager.resolve_project_id(project_alias)
+    if not config_manager.is_plan_project(project_alias):
+        return (
+            f"Project '{actual_id}' is not configured as a plan project. "
+            f"Set 'is_plan: true' in configuration if this project contains plans."
+        )
+    return None
+
+
+def _reject_plan_project(project_alias: str, tool_name: str) -> str | None:
+    """Return error string if project IS a plan project, else None."""
+    if config_manager.is_plan_project(project_alias):
+        return (
+            f"❌ {tool_name} is not currently supported for plan projects.\n"
+            f"Please use:\n"
+            f"  - get_plan_workitems('{project_alias}', 'PLAN-ID') to see items in a specific plan\n"
+            f"  - get_plans('{project_alias}') to list available plans\n"
+            f"  - search_plans('{project_alias}', 'query') to search for specific plans"
+        )
+    return None
+
 
 # --- Configuration Tools ---
 
@@ -148,7 +191,7 @@ async def health_check() -> str:
         logger.error(f"Health check failed: {e}")
         return f"❌ Polarion connection failed: {e}"
     except Exception as e:
-        logger.error(f"An unexpected error occurred during health check: {e}")
+        logger.error(f"Health check failed unexpectedly: {e}")
         return f"❌ An unexpected error occurred: {e}"
 
 
@@ -165,19 +208,10 @@ async def get_project_info(project_alias: str) -> str:
 
     Note: Also validates project exists and you have access.
     """
-    # Resolve project alias to actual ID
-    actual_project_id = config_manager.resolve_project_id(project_alias)
-
     try:
-        with PolarionDriver(
-            url=settings.polarion_url,
-            user=settings.polarion_user,
-            token=settings.polarion_token,
-        ) as driver:
-            driver.select_project(actual_project_id)
+        with _polarion_project(project_alias) as (driver, actual_project_id):
             info = driver.get_project_info()
 
-            # Add config info if available
             config = config_manager.get_project_config(project_alias)
             output = f"Project Information for '{actual_project_id}'"
             if config and project_alias != actual_project_id:
@@ -186,7 +220,6 @@ async def get_project_info(project_alias: str) -> str:
             output += f"- Name: {info.get('name', 'N/A')}\n"
             output += f"- Description: {info.get('description', 'N/A')}"
 
-            # Add configured types if available
             if config and config.work_item_types:
                 output += (
                     f"\n- Configured Types: {', '.join(config.work_item_types[:5])}"
@@ -212,31 +245,13 @@ async def get_workitem(project_alias: str, workitem_id: str) -> str:
     Returns: "Work Item Details for '{id}':" with formatted details
              or "❌ [error message]" on failure
     """
-    # Resolve project alias to actual ID
-    actual_project_id = config_manager.resolve_project_id(project_alias)
-
-    # Check if this is a plan project
-    if config_manager.is_plan_project(project_alias):
-        return (
-            f"❌ get_workitem is not currently supported for plan projects.\n"
-            f"Please use:\n"
-            f"  - get_plan_workitems('{project_alias}', 'PLAN-ID') to see items in a specific plan\n"
-            f"  - get_plans('{project_alias}') to list available plans"
-        )
+    if err := _reject_plan_project(project_alias, "get_workitem"):
+        return err
 
     try:
-        with PolarionDriver(
-            url=settings.polarion_url,
-            user=settings.polarion_user,
-            token=settings.polarion_token,
-        ) as driver:
-            driver.select_project(actual_project_id)
+        with _polarion_project(project_alias) as (driver, _):
             item = driver.get_workitem(workitem_id)
-
-            # Extract all fields with error handling
             details = extract_workitem_fields(item, project_alias, config_manager)
-
-            # Format and return the details
             return format_workitem_details(details, workitem_id)
     except Exception as e:
         logger.error(f"Failed to get work item '{workitem_id}': {e}")
@@ -290,42 +305,19 @@ async def search_workitems(
     - "query:open_bugs" (uses configured named query)
     - "query:my_items" (expands to configured query with $current_user)
     """
-    # Resolve project alias to actual ID
-    actual_project_id = config_manager.resolve_project_id(project_alias)
+    if err := _reject_plan_project(project_alias, "search_workitems"):
+        return err
 
-    # Check if this is a plan project
-    if config_manager.is_plan_project(project_alias):
-        return (
-            f"❌ search_workitems is not currently supported for plan projects.\n"
-            f"Please use:\n"
-            f"  - get_plan_workitems('{project_alias}', 'PLAN-ID') to see items in a specific plan\n"
-            f"  - get_plans('{project_alias}') to list available plans\n"
-            f"  - search_plans('{project_alias}', 'query') to search for specific plans"
-        )
-
-    # Resolve named queries
     resolved_query = config_manager.resolve_query(project_alias, query)
 
     try:
-        with PolarionDriver(
-            url=settings.polarion_url,
-            user=settings.polarion_user,
-            token=settings.polarion_token,
-        ) as driver:
-            driver.select_project(actual_project_id)
-
-            # Always use default fields unless explicitly specified
-            # This avoids ClassCastException issues with custom fields on certain work item types
+        with _polarion_project(project_alias) as (driver, actual_project_id):
             if field_list:
                 fields = [f.strip() for f in field_list.split(",")]
             else:
-                # Always use default display fields
-                # Users can explicitly provide field_list if they need custom fields
                 fields = config_manager.get_display_fields()
 
             results = driver.search_workitems(resolved_query, fields)
-
-            # Format and return the results
             return format_search_results(
                 results, query, resolved_query, actual_project_id, fields
             )
@@ -345,20 +337,9 @@ async def get_test_runs(project_alias: str) -> str:
     Returns: "Found N test runs..." with up to 20 results
              or "❌ [error message]" on failure
     """
-    # Resolve project alias to actual ID
-    actual_project_id = config_manager.resolve_project_id(project_alias)
-
     try:
-        with PolarionDriver(
-            url=settings.polarion_url,
-            user=settings.polarion_user,
-            token=settings.polarion_token,
-        ) as driver:
-            driver.select_project(actual_project_id)
-            test_runs = driver.get_test_runs()
-
-            # Format and return the test runs
-            return format_test_runs(test_runs, actual_project_id)
+        with _polarion_project(project_alias) as (driver, actual_project_id):
+            return format_test_runs(driver.get_test_runs(), actual_project_id)
     except Exception as e:
         logger.error(f"Failed to get test runs: {e}")
         return f"❌ Failed to get test runs: {e}"
@@ -376,20 +357,9 @@ async def get_test_run(project_alias: str, test_run_id: str) -> str:
     Returns: "Test Run Details for '{id}':" with formatted details
              or "❌ [error message]" on failure
     """
-    # Resolve project alias to actual ID
-    actual_project_id = config_manager.resolve_project_id(project_alias)
-
     try:
-        with PolarionDriver(
-            url=settings.polarion_url,
-            user=settings.polarion_user,
-            token=settings.polarion_token,
-        ) as driver:
-            driver.select_project(actual_project_id)
-            test_run = driver.get_test_run(test_run_id)
-
-            # Extract and format test run details
-            details = extract_test_run_details(test_run)
+        with _polarion_project(project_alias) as (driver, _):
+            details = extract_test_run_details(driver.get_test_run(test_run_id))
             return format_test_run_details(details, test_run_id)
     except Exception as e:
         logger.error(f"Failed to get test run '{test_run_id}': {e}")
@@ -409,16 +379,8 @@ async def get_documents(project_alias: str) -> str:
 
     Note: Use returned IDs with get_test_specs_from_document.
     """
-    # Resolve project alias to actual ID
-    actual_project_id = config_manager.resolve_project_id(project_alias)
-
     try:
-        with PolarionDriver(
-            url=settings.polarion_url,
-            user=settings.polarion_user,
-            token=settings.polarion_token,
-        ) as driver:
-            driver.select_project(actual_project_id)
+        with _polarion_project(project_alias) as (driver, actual_project_id):
             documents = driver.get_documents()
 
             if not documents:
@@ -450,25 +412,13 @@ async def get_test_specs_from_document(project_alias: str, document_id: str) -> 
 
     Note: Searches for type:testcase items linked to document.
     """
-    # Resolve project alias to actual ID
-    actual_project_id = config_manager.resolve_project_id(project_alias)
-
     try:
-        with PolarionDriver(
-            url=settings.polarion_url,
-            user=settings.polarion_user,
-            token=settings.polarion_token,
-        ) as driver:
-            driver.select_project(actual_project_id)
-
-            # First get the document
+        with _polarion_project(project_alias) as (driver, actual_project_id):
             doc = driver.get_document(document_id)
             if not doc:
                 return f"Document '{document_id}' not found in project '{actual_project_id}'."
 
-            # Get test spec IDs from document
             test_spec_ids = driver.test_spec_ids_in_doc(doc)
-
             if not test_spec_ids:
                 return f"No test specifications found in document '{document_id}'."
 
@@ -498,10 +448,8 @@ async def discover_work_item_types(project_alias: str, limit: int = 1000) -> str
 
     Note: Uses configuration cache if available, otherwise discovers from Polarion.
     """
-    # Resolve project alias to actual ID
     actual_project_id = config_manager.resolve_project_id(project_alias)
 
-    # Check if types are configured
     configured_types = config_manager.get_work_item_types(project_alias)
     if configured_types:
         return format_configured_types(
@@ -509,20 +457,9 @@ async def discover_work_item_types(project_alias: str, limit: int = 1000) -> str
         )
 
     try:
-        with PolarionDriver(
-            url=settings.polarion_url,
-            user=settings.polarion_user,
-            token=settings.polarion_token,
-        ) as driver:
-            driver.select_project(actual_project_id)
-
-            # Search for work items with type field
+        with _polarion_project(project_alias) as (driver, actual_project_id):
             results = driver.search_workitems("NOT type:null", ["id", "type"])
-
-            # Extract and count work item types
             types_count = extract_work_item_types_from_results(results, limit)
-
-            # Format and return the discovered types
             sample_size = min(len(results), limit)
             return format_discovered_types(types_count, actual_project_id, sample_size)
     except Exception as e:
@@ -546,25 +483,12 @@ async def get_plans(project_alias: str) -> str:
 
     Note: Only works for projects configured with is_plan: true
     """
-    # Resolve project alias to actual ID
-    actual_project_id = config_manager.resolve_project_id(project_alias)
-
-    # Check if this is a plan project
-    if not config_manager.is_plan_project(project_alias):
-        return f"Project '{actual_project_id}' is not configured as a plan project. Set 'is_plan: true' in configuration if this project contains plans."
+    if err := _require_plan_project(project_alias):
+        return err
 
     try:
-        with PolarionDriver(
-            url=settings.polarion_url,
-            user=settings.polarion_user,
-            token=settings.polarion_token,
-        ) as driver:
-            driver.select_project(actual_project_id)
-            # Pass empty string explicitly to get all plans
-            plans = driver.search_plans("")
-
-            # Format and return the plans
-            return format_plans(plans, actual_project_id)
+        with _polarion_project(project_alias) as (driver, actual_project_id):
+            return format_plans(driver.search_plans(""), actual_project_id)
     except Exception as e:
         logger.error(f"Failed to get plans: {e}")
         return f"❌ Failed to get plans: {e}"
@@ -584,24 +508,12 @@ async def get_plan(project_alias: str, plan_id: str) -> str:
 
     Note: Only works for projects configured with is_plan: true
     """
-    # Resolve project alias to actual ID
-    actual_project_id = config_manager.resolve_project_id(project_alias)
-
-    # Check if this is a plan project
-    if not config_manager.is_plan_project(project_alias):
-        return f"Project '{actual_project_id}' is not configured as a plan project. Set 'is_plan: true' in configuration if this project contains plans."
+    if err := _require_plan_project(project_alias):
+        return err
 
     try:
-        with PolarionDriver(
-            url=settings.polarion_url,
-            user=settings.polarion_user,
-            token=settings.polarion_token,
-        ) as driver:
-            driver.select_project(actual_project_id)
-            plan = driver.get_plan(plan_id)
-
-            # Extract and format plan details
-            details = extract_plan_details(plan)
+        with _polarion_project(project_alias) as (driver, _):
+            details = extract_plan_details(driver.get_plan(plan_id))
             return format_plan_details(details, plan_id)
     except Exception as e:
         logger.error(f"Failed to get plan '{plan_id}': {e}")
@@ -622,26 +534,13 @@ async def get_plan_workitems(project_alias: str, plan_id: str) -> str:
 
     Note: Only works for projects configured with is_plan: true
     """
-    # Resolve project alias to actual ID
-    actual_project_id = config_manager.resolve_project_id(project_alias)
-
-    # Check if this is a plan project
-    if not config_manager.is_plan_project(project_alias):
-        return f"Project '{actual_project_id}' is not configured as a plan project. Set 'is_plan: true' in configuration if this project contains plans."
+    if err := _require_plan_project(project_alias):
+        return err
 
     try:
-        with PolarionDriver(
-            url=settings.polarion_url,
-            user=settings.polarion_user,
-            token=settings.polarion_token,
-        ) as driver:
-            driver.select_project(actual_project_id)
+        with _polarion_project(project_alias) as (driver, _):
             plan = driver.get_plan(plan_id)
-
-            # Get work items from the plan
             workitems = plan.getWorkitemsInPlan()
-
-            # Format and return the work items
             return format_plan_workitems(workitems, plan_id)
     except Exception as e:
         logger.error(f"Failed to get work items for plan '{plan_id}': {e}")
@@ -669,23 +568,13 @@ async def search_plans(project_alias: str, query: str = "") -> str:
 
     Note: Only works for projects configured with is_plan: true
     """
-    # Resolve project alias to actual ID
-    actual_project_id = config_manager.resolve_project_id(project_alias)
-
-    # Check if this is a plan project
-    if not config_manager.is_plan_project(project_alias):
-        return f"Project '{actual_project_id}' is not configured as a plan project. Set 'is_plan: true' in configuration if this project contains plans."
+    if err := _require_plan_project(project_alias):
+        return err
 
     try:
-        with PolarionDriver(
-            url=settings.polarion_url,
-            user=settings.polarion_user,
-            token=settings.polarion_token,
-        ) as driver:
-            driver.select_project(actual_project_id)
+        with _polarion_project(project_alias) as (driver, actual_project_id):
             plans = driver.search_plans(query)
 
-            # Format and return the plans
             if not plans:
                 return f"No plans found in project '{actual_project_id}' for query: '{query}'"
 

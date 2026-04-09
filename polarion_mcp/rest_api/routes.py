@@ -1,14 +1,13 @@
 """
-HTTP routes that expose Polarion tools to GPT Actions.
+REST API routes that expose Polarion MCP tools over HTTP.
 
 These routes wrap the underlying FastMCP tools so they can be called through
-standard HTTP requests defined in the OpenAPI definition that GPT Actions
-consumes. The endpoints all return structured JSON responses that include the
-plain-text result produced by the MCP tool along with any structured payload
-if one is available.
+standard HTTP requests (e.g. OpenAI GPT Actions, Copilot Studio, curl).
+The endpoints return structured JSON responses that include the plain-text
+result produced by the MCP tool along with any structured payload.
 
-This module is imported by polarion_mcp.mcp.server when mode='gpt', which
-triggers the @mcp.custom_route decorators and registers the routes.
+This module is imported by polarion_mcp.mcp.server at startup, which triggers
+the @mcp.custom_route decorators and registers the routes on the ASGI app.
 """
 
 from __future__ import annotations
@@ -33,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 # Paths for static metadata that back the routes below
 REPO_ROOT = Path(__file__).resolve().parents[2]
-OPENAPI_SPEC_PATH = REPO_ROOT / "openapi.yaml"
+OPENAPI_SPEC_PATH = REPO_ROOT / "generated" / "openapi.yaml"
 
 # Map HTTP method/path pairs to the underlying MCP tool name so we can surface
 # the original docstrings inside the generated OpenAPI document.
@@ -43,11 +42,20 @@ TOOL_ROUTE_MAP: dict[tuple[str, str], str] = {
     ("GET", "/actions/projects/{project_alias}"): "get_project_info",
     ("GET", "/actions/projects/{project_alias}/types"): "get_project_types",
     ("GET", "/actions/projects/{project_alias}/named-queries"): "get_named_queries",
-    ("GET", "/actions/projects/{project_alias}/workitems/{workitem_id}"): "get_workitem",
+    (
+        "GET",
+        "/actions/projects/{project_alias}/workitems/{workitem_id}",
+    ): "get_workitem",
     ("POST", "/actions/projects/{project_alias}/workitems/search"): "search_workitems",
-    ("GET", "/actions/projects/{project_alias}/workitems/discover"): "discover_work_item_types",
+    (
+        "GET",
+        "/actions/projects/{project_alias}/workitems/discover",
+    ): "discover_work_item_types",
     ("GET", "/actions/projects/{project_alias}/test-runs"): "get_test_runs",
-    ("GET", "/actions/projects/{project_alias}/test-runs/{test_run_id}"): "get_test_run",
+    (
+        "GET",
+        "/actions/projects/{project_alias}/test-runs/{test_run_id}",
+    ): "get_test_run",
     ("GET", "/actions/projects/{project_alias}/documents"): "get_documents",
     (
         "GET",

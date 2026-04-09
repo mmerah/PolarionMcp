@@ -1,7 +1,9 @@
 """Test the improved get_workitem functionality with custom fields and error handling."""
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
+
 from polarion_mcp.core.config import ConfigManager
 
 
@@ -33,7 +35,7 @@ async def test_get_workitem_with_custom_fields():
             "riskRelevance": "High",
         }
         return custom_values.get(field_name)
-    
+
     mock_item.getCustomField = Mock(side_effect=get_custom_field)
 
     # Mock config manager

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mcp-polarion"
 version = "0.3.0"
-description = "CLI-first Polarion ALM client with MCP server, Copilot Studio, and GPT Actions support."
+description = "CLI-first Polarion ALM client with MCP server and REST API support."
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
@@ -26,7 +26,6 @@ dependencies = [
     "pydantic-settings>=2.0.0,<2.12",
     "polarion>=1.0.0",
     "python-dotenv>=1.0.0",
-    "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
     "fastmcp==2.10.6",
     "pyyaml>=6.0.0",
@@ -46,7 +45,7 @@ packages = [
     "polarion_mcp",
     "polarion_mcp.core",
     "polarion_mcp.mcp",
-    "polarion_mcp.gpt_actions",
+    "polarion_mcp.rest_api",
     "polarion_mcp.docgen",
     "polarion_mcp.cli",
 ]
