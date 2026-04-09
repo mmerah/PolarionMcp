@@ -2,9 +2,16 @@
 Helper functions for MCP tools to handle complex formatting and field extraction.
 """
 
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 from mcp_server.config import ConfigManager
+
+
+def _parse_workitem_id_from_uri(uri: str) -> Optional[str]:
+    """Extract work item ID from a Subterra URI."""
+    match = re.search(r"\${WorkItem}(.+)$", uri)
+    return match.group(1) if match else None
 
 
 def extract_workitem_fields(
@@ -80,7 +87,60 @@ def extract_workitem_fields(
                     # Skip individual custom fields that cause errors
                     pass
 
+    # Extract linked work items
+    try:
+        linked_items = _extract_linked_workitems(item)
+        if linked_items:
+            details["Linked Work Items"] = _format_linked_workitems(linked_items)
+    except Exception:
+        pass
+
     return details
+
+
+def _extract_linked_workitems(item: Any) -> List[Tuple[str, str, str]]:
+    """
+    Extract linked work items from a Polarion work item.
+
+    Returns a list of (role, target_id, direction) tuples.
+    """
+    links: List[Tuple[str, str, str]] = []
+
+    # Forward links (outgoing)
+    if hasattr(item, "linkedWorkItems") and item.linkedWorkItems is not None:
+        try:
+            for linked in item.linkedWorkItems.LinkedWorkItem:
+                role_id = getattr(linked.role, "id", "unknown") if linked.role else "unknown"
+                target_id = _parse_workitem_id_from_uri(linked.workItemURI) if linked.workItemURI else None
+                if target_id:
+                    links.append((role_id, target_id, "out"))
+        except (AttributeError, TypeError):
+            pass
+
+    # Back links (incoming / derived)
+    if hasattr(item, "linkedWorkItemsDerived") and item.linkedWorkItemsDerived is not None:
+        try:
+            for linked in item.linkedWorkItemsDerived.LinkedWorkItem:
+                role_id = getattr(linked.role, "id", "unknown") if linked.role else "unknown"
+                target_id = _parse_workitem_id_from_uri(linked.workItemURI) if linked.workItemURI else None
+                if target_id:
+                    links.append((role_id, target_id, "in"))
+        except (AttributeError, TypeError):
+            pass
+
+    return links
+
+
+def _format_linked_workitems(links: List[Tuple[str, str, str]]) -> str:
+    """Format linked work items into a readable string."""
+    if not links:
+        return "None"
+
+    parts = []
+    for role, target_id, direction in links:
+        arrow = "->" if direction == "out" else "<-"
+        parts.append(f"{arrow} {target_id} ({role})")
+    return "\n  ".join(parts)
 
 
 def format_workitem_details(details: Dict[str, str], workitem_id: str) -> str:
