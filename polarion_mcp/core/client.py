@@ -7,6 +7,8 @@ Polarion client — a robust, read-only driver for accessing Polarion ALM data.
 import atexit
 import logging
 import re
+import tempfile
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from polarion.document import Document
@@ -162,10 +164,63 @@ class PolarionDriver:
             return self._project.getDocument(doc_location)
         except Exception:
             # The underlying library raises a generic exception if not found.
-            self.log.warning(
+            self.log.debug(
                 f"Document at location '{doc_location}' not found in project '{self._project.id}'."
             )
             return None
+
+    def resolve_document(self, document_id_or_location: str) -> Optional[Document]:
+        """
+        Resolve a document by either full location ("Space/DocId") or bare ID.
+
+        If a bare ID matches multiple documents, no document is returned to avoid
+        accidentally selecting the wrong one.
+        """
+        document = self.get_document(document_id_or_location)
+        if document is not None:
+            return document
+
+        if "/" in document_id_or_location:
+            return None
+
+        matches = [
+            doc
+            for doc in self.get_documents()
+            if getattr(doc, "id", None) == document_id_or_location
+        ]
+        if len(matches) == 1:
+            return matches[0]
+
+        if len(matches) > 1:
+            self.log.warning(
+                "Document ID '%s' is ambiguous in project '%s'.",
+                document_id_or_location,
+                self._project.id if self._project else "unknown",
+            )
+        return None
+
+    def export_document_pdf(self, document: Document) -> Path:
+        """
+        Export a Polarion document to a PDF stored in the system temp directory.
+
+        Args:
+            document: The Document object to export.
+
+        Returns:
+            Absolute path to the exported PDF.
+        """
+        document_id = getattr(document, "id", "document")
+        safe_id = re.sub(r"[^A-Za-z0-9._-]+", "_", document_id).strip("_") or "document"
+
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            prefix=f"polarion_{safe_id}_",
+            suffix=".pdf",
+            dir=tempfile.gettempdir(),
+            delete=False,
+        ) as tmp_file:
+            tmp_file.write(document.exportDocumentToPDF())
+            return Path(tmp_file.name).resolve()
 
     def get_documents(self) -> List[Document]:
         """
@@ -275,7 +330,10 @@ class PolarionDriver:
             ) from e
 
     def search_workitems(
-        self, query: str, field_list: Optional[List[str]] = None
+        self,
+        query: str,
+        field_list: Optional[List[str]] = None,
+        limit: int | None = None,
     ) -> List[Dict[str, Any]]:
         """
         Searches for work items using a Polarion Lucene query.
@@ -296,7 +354,13 @@ class PolarionDriver:
             )
         try:
             # Get results from Polarion (returns Zeep objects)
-            results = self._project.searchWorkitem(query=query, field_list=field_list)
+            search_kwargs: dict[str, Any] = {
+                "query": query,
+                "field_list": field_list,
+            }
+            if limit is not None:
+                search_kwargs["limit"] = limit
+            results = self._project.searchWorkitem(**search_kwargs)
 
             # Convert Zeep objects to dictionaries
             from zeep.helpers import serialize_object

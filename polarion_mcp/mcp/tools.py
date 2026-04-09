@@ -4,14 +4,18 @@ from typing import Optional
 
 from fastmcp import FastMCP
 
+from polarion_mcp.core.artifacts import artifact_store
 from polarion_mcp.core.client import PolarionConnectionException, PolarionDriver
 from polarion_mcp.core.formatters import (
+    extract_document_fields,
     extract_plan_details,
     extract_test_run_details,
     extract_work_item_types_from_results,
     extract_workitem_fields,
     format_configured_types,
     format_discovered_types,
+    format_document_details,
+    format_multiple_workitem_details,
     format_plan_details,
     format_plan_workitems,
     format_plans,
@@ -68,6 +72,22 @@ def _reject_plan_project(project_alias: str, tool_name: str) -> str | None:
             f"  - search_plans('{project_alias}', 'query') to search for specific plans"
         )
     return None
+
+
+def _normalize_workitem_ids(workitem_id: str | list[str]) -> list[str]:
+    """Normalize a single work item ID or list of IDs into a validated list."""
+    if isinstance(workitem_id, str):
+        ids = [workitem_id]
+    else:
+        ids = workitem_id
+
+    normalized = [
+        item.strip() for item in ids if isinstance(item, str) and item.strip()
+    ]
+    if not normalized:
+        raise ValueError("At least one non-empty work item ID is required.")
+
+    return normalized
 
 
 # --- Configuration Tools ---
@@ -234,13 +254,13 @@ async def get_project_info(project_alias: str) -> str:
 
 
 @mcp.tool
-async def get_workitem(project_alias: str, workitem_id: str) -> str:
+async def get_workitem(project_alias: str, workitem_id: str | list[str]) -> str:
     """
     Get work item details (title, type, status, author, dates, description).
 
     Args:
         project_alias: Project alias or ID (e.g., "webstore" or "MYPROJ")
-        workitem_id: Full ID with prefix (e.g., "MYPROJ-123")
+        workitem_id: Full ID with prefix (e.g., "MYPROJ-123") or a list of IDs
 
     Returns: "Work Item Details for '{id}':" with formatted details
              or "❌ [error message]" on failure
@@ -249,10 +269,31 @@ async def get_workitem(project_alias: str, workitem_id: str) -> str:
         return err
 
     try:
+        workitem_ids = _normalize_workitem_ids(workitem_id)
+
         with _polarion_project(project_alias) as (driver, _):
-            item = driver.get_workitem(workitem_id)
-            details = extract_workitem_fields(item, project_alias, config_manager)
-            return format_workitem_details(details, workitem_id)
+            results: list[tuple[str, str]] = []
+
+            for item_id in workitem_ids:
+                try:
+                    item = driver.get_workitem(item_id)
+                    details = extract_workitem_fields(
+                        item, project_alias, config_manager
+                    )
+                    results.append((item_id, format_workitem_details(details, item_id)))
+                except Exception as item_error:
+                    logger.error(f"Failed to get work item '{item_id}': {item_error}")
+                    results.append(
+                        (
+                            item_id,
+                            f"Work Item Details for '{item_id}':\n- Error: ❌ Failed to get work item: {item_error}\n",
+                        )
+                    )
+
+            if len(results) == 1:
+                return results[0][1]
+
+            return format_multiple_workitem_details(results)
     except Exception as e:
         logger.error(f"Failed to get work item '{workitem_id}': {e}")
         return f"❌ Failed to get work item: {e}"
@@ -260,7 +301,10 @@ async def get_workitem(project_alias: str, workitem_id: str) -> str:
 
 @mcp.tool
 async def search_workitems(
-    project_alias: str, query: str, field_list: Optional[str] = None
+    project_alias: str,
+    query: str,
+    field_list: Optional[str] = None,
+    limit: int | None = None,
 ) -> str:
     """
     Search work items using Lucene query syntax or named queries.
@@ -270,6 +314,7 @@ async def search_workitems(
         query: Lucene query or named query (e.g., "query:open_bugs")
         field_list: Optional CSV fields (e.g., "id,title,type,status")
                    NOTE: Custom fields CANNOT be retrieved via field_list due to Polarion API limitations
+        limit: Optional maximum number of results to fetch and display
 
     Returns: "Found N work items..." with up to 20 results
              "...and X more" if >20 results
@@ -308,6 +353,9 @@ async def search_workitems(
     if err := _reject_plan_project(project_alias, "search_workitems"):
         return err
 
+    if limit is not None and limit <= 0:
+        return "❌ Failed to search work items: limit must be a positive integer."
+
     resolved_query = config_manager.resolve_query(project_alias, query)
 
     try:
@@ -317,9 +365,18 @@ async def search_workitems(
             else:
                 fields = config_manager.get_display_fields()
 
-            results = driver.search_workitems(resolved_query, fields)
+            fetch_limit = limit + 1 if limit is not None else None
+            results = driver.search_workitems(resolved_query, fields, limit=fetch_limit)
+            has_more = limit is not None and len(results) > limit
+            displayed_results = results[:limit] if limit is not None else results
             return format_search_results(
-                results, query, resolved_query, actual_project_id, fields
+                displayed_results,
+                query,
+                resolved_query,
+                actual_project_id,
+                fields,
+                max_items=limit if limit is not None else 20,
+                has_more=has_more,
             )
     except Exception as e:
         logger.error(f"Failed to search work items with query '{query}': {e}")
@@ -367,18 +424,22 @@ async def get_test_run(project_alias: str, test_run_id: str) -> str:
 
 
 @mcp.tool
-async def get_documents(project_alias: str) -> str:
+async def get_documents(project_alias: str, limit: int | None = None) -> str:
     """
     List documents with ID, title, and location.
 
     Args:
         project_alias: Project alias or ID (e.g., "webstore" or "MYPROJ")
+        limit: Optional maximum number of documents to display
 
     Returns: "Found N documents..." with up to 20 results
              or "❌ [error message]" on failure
 
     Note: Use returned IDs with get_test_specs_from_document.
     """
+    if limit is not None and limit <= 0:
+        return "❌ Failed to get documents: limit must be a positive integer."
+
     try:
         with _polarion_project(project_alias) as (driver, actual_project_id):
             documents = driver.get_documents()
@@ -387,15 +448,60 @@ async def get_documents(project_alias: str) -> str:
                 return f"No documents found in project '{actual_project_id}'."
 
             output = f"Found {len(documents)} documents in project '{actual_project_id}':\n\n"
-            for i, doc in enumerate(documents[:20], 1):
-                output += f"{i}. ID: {doc.id}, Title: {getattr(doc, 'title', 'N/A')}, Location: {getattr(doc, 'moduleFolder', 'N/A')}\n"
+            max_items = limit if limit is not None else 20
+            for i, doc in enumerate(documents[:max_items], 1):
+                location = getattr(doc, "moduleFolder", "N/A")
+                path = (
+                    f"{location}/{doc.id}"
+                    if location not in ("", "N/A", None)
+                    else getattr(doc, "id", "N/A")
+                )
+                output += (
+                    f"{i}. ID: {doc.id}, Title: {getattr(doc, 'title', 'N/A')}, "
+                    f"Location: {location}, Path: {path}\n"
+                )
 
-            if len(documents) > 20:
-                output += f"\n...and {len(documents) - 20} more."
+            if len(documents) > max_items:
+                output += f"\n...and {len(documents) - max_items} more."
             return output
     except Exception as e:
         logger.error(f"Failed to get documents: {e}")
         return f"❌ Failed to get documents: {e}"
+
+
+@mcp.tool
+async def get_document(project_alias: str, document_id: str) -> str:
+    """
+    Export a document as PDF and return its metadata plus the saved file path.
+
+    Args:
+        project_alias: Project alias or ID (e.g., "webstore" or "MYPROJ")
+        document_id: Document location (e.g., "QA/TestSpecs")
+
+    Returns: "Document Details for '{id}':" with metadata and artifact download info
+             or "❌ [error message]" on failure
+    """
+    try:
+        with _polarion_project(project_alias) as (driver, actual_project_id):
+            document = driver.resolve_document(document_id)
+            if not document:
+                return (
+                    f"Document '{document_id}' not found in project "
+                    f"'{actual_project_id}'."
+                )
+
+            pdf_path = driver.export_document_pdf(document)
+            filename = f"{getattr(document, 'id', document_id)}.pdf"
+            artifact = artifact_store.register_file(pdf_path, filename)
+            details = extract_document_fields(
+                document,
+                pdf_path=str(pdf_path),
+            )
+            details["Download Path"] = f"/artifacts/{artifact.artifact_id}"
+            return format_document_details(details, document_id)
+    except Exception as e:
+        logger.error(f"Failed to get document '{document_id}': {e}")
+        return f"❌ Failed to get document: {e}"
 
 
 @mcp.tool
@@ -414,7 +520,7 @@ async def get_test_specs_from_document(project_alias: str, document_id: str) -> 
     """
     try:
         with _polarion_project(project_alias) as (driver, actual_project_id):
-            doc = driver.get_document(document_id)
+            doc = driver.resolve_document(document_id)
             if not doc:
                 return f"Document '{document_id}' not found in project '{actual_project_id}'."
 

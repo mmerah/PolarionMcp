@@ -81,7 +81,7 @@ def parse_xml_custom_fields(xml_content: str) -> list[str]:
             field_ids.append(field_id)
 
     if not field_ids:
-        raise ValueError("No <field id=\"...\"> entries found in XML.")
+        raise ValueError('No <field id="..."> entries found in XML.')
 
     return field_ids
 
@@ -247,7 +247,9 @@ def import_custom_fields(
         )
         xml_content = file_path.read_text(encoding="utf-8")
         custom_fields = parse_xml_custom_fields(xml_content)
-        update_project_custom_fields(config, project_alias, resolved_type, custom_fields)
+        update_project_custom_fields(
+            config, project_alias, resolved_type, custom_fields
+        )
         imported_types.append(resolved_type)
 
     if not dry_run:

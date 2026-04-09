@@ -38,7 +38,9 @@ def test_parse_xml_custom_fields_repairs_ampersands() -> None:
 
 
 def test_parse_xml_custom_fields_repairs_br_tags() -> None:
-    xml_content = '<fields><field id="notes" description="Line 1 <br> Line 2" /></fields>'
+    xml_content = (
+        '<fields><field id="notes" description="Line 1 <br> Line 2" /></fields>'
+    )
 
     assert parse_xml_custom_fields(xml_content) == ["notes"]
 
@@ -46,7 +48,9 @@ def test_parse_xml_custom_fields_repairs_br_tags() -> None:
 def test_parse_xml_custom_fields_rejects_unrecoverable_xml() -> None:
     xml_content = '<fields><field id="broken"></fields'
 
-    with pytest.raises(ValueError, match="Could not parse XML after applying common repairs"):
+    with pytest.raises(
+        ValueError, match="Could not parse XML after applying common repairs"
+    ):
         parse_xml_custom_fields(xml_content)
 
 

@@ -94,7 +94,7 @@ search_workitems("proj", "type:defect", "id,title,severity")
 ```yaml
 Plan projects (is_plan: true):
   ❌ search_workitems - Not supported
-  ❌ get_workitem - Not supported  
+  ❌ get_workitem - Not supported
   ✅ get_plan_workitems - Use this instead
   ✅ search_plans - Search plans themselves
 

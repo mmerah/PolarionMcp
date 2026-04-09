@@ -4,7 +4,6 @@ import os
 from unittest.mock import Mock, patch
 
 import pytest
-
 from polarion_mcp.core.settings import PolarionSettings
 
 
@@ -104,6 +103,70 @@ class TestTools:
             mock_driver.get_workitem.assert_called_once_with("TEST-123")
 
     @pytest.mark.asyncio
+    async def test_get_workitem_multiple_ids_partial_failure(
+        self, mock_settings, mock_driver
+    ):
+        """Test get_workitem can fetch multiple IDs with per-item error handling."""
+        import polarion_mcp.mcp.tools
+
+        item1 = Mock()
+        item1.id = "TEST-123"
+        item1.title = "First Item"
+        item1.type = Mock(id="requirement")
+        item1.status = Mock(id="open")
+        item1.author = Mock(id="test@example.com")
+        item1.created = "2024-01-01"
+        item1.description = Mock(content="First description")
+
+        def get_workitem_side_effect(workitem_id):
+            if workitem_id == "TEST-123":
+                return item1
+            raise Exception("Not found")
+
+        mock_driver.get_workitem.side_effect = get_workitem_side_effect
+
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            result = await polarion_mcp.mcp.tools.get_workitem.fn(
+                "TEST_PROJECT", ["TEST-123", "TEST-404"]
+            )
+
+            assert "Work Item Results (2 requested):" in result
+            assert "Work Item Details for 'TEST-123':" in result
+            assert "Title: First Item" in result
+            assert "Work Item Details for 'TEST-404':" in result
+            assert "Error: ❌ Failed to get work item: Not found" in result
+
+    @pytest.mark.asyncio
+    async def test_get_workitem_rejects_plan_projects(self, mock_settings, mock_driver):
+        """Test get_workitem is rejected for plan projects."""
+        import polarion_mcp.mcp.tools
+        from polarion_mcp.core.config import ConfigManager
+
+        mock_item = Mock()
+        mock_item.id = "PLAN-123"
+        mock_item.title = "Planned Item"
+        mock_item.type = Mock(id="task")
+        mock_item.status = Mock(id="open")
+        mock_item.author = Mock(id="planner")
+        mock_item.created = "2024-01-01"
+        mock_item.description = Mock(content="Plan work item")
+        mock_driver.get_workitem.return_value = mock_item
+
+        mock_config = Mock(spec=ConfigManager)
+        mock_config.resolve_project_id.return_value = "PLAN_PROJECT"
+        mock_config.is_plan_project.return_value = True
+        mock_config.get_custom_fields.return_value = None
+
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            with patch("polarion_mcp.mcp.tools.config_manager", mock_config):
+                result = await polarion_mcp.mcp.tools.get_workitem.fn(
+                    "planning", "PLAN-123"
+                )
+
+                assert "not currently supported for plan projects" in result
+                mock_driver.get_workitem.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_search_workitems(self, mock_settings, mock_driver):
         """Test search_workitems tool."""
         import polarion_mcp.mcp.tools
@@ -125,6 +188,29 @@ class TestTools:
             assert "Test Item 1" in result
             assert "Test Item 2" in result
             mock_driver.search_workitems.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_search_workitems_with_limit(self, mock_settings, mock_driver):
+        """Test search_workitems forwards an explicit limit."""
+        import polarion_mcp.mcp.tools
+
+        mock_driver.search_workitems.return_value = [
+            {"id": "TEST-123", "title": "Test Item 1"},
+            {"id": "TEST-124", "title": "Test Item 2"},
+            {"id": "TEST-125", "title": "Test Item 3"},
+        ]
+
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            result = await polarion_mcp.mcp.tools.search_workitems.fn(
+                "TEST_PROJECT", "type:requirement", "id,title", 2
+            )
+
+            assert "Found 2 work items" in result
+            assert "more exist" in result
+            assert "more beyond the configured limit" in result
+            mock_driver.search_workitems.assert_called_once_with(
+                "type:requirement", ["id", "title"], limit=3
+            )
 
     @pytest.mark.asyncio
     async def test_get_test_runs(self, mock_settings, mock_driver):
@@ -157,6 +243,65 @@ class TestTools:
             assert "Found 2 documents" in result
             assert "DOC-1" in result
             assert "DOC-2" in result
+            assert "Path: Specs/DOC-1" in result
+
+    @pytest.mark.asyncio
+    async def test_get_documents_with_limit(self, mock_settings, mock_driver):
+        """Test get_documents applies display limit."""
+        import polarion_mcp.mcp.tools
+
+        mock_driver.get_documents.return_value = [
+            Mock(id="DOC-1", title="Document 1", moduleFolder="Specs"),
+            Mock(id="DOC-2", title="Document 2", moduleFolder="Specs"),
+            Mock(id="DOC-3", title="Document 3", moduleFolder="Specs"),
+        ]
+
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            result = await polarion_mcp.mcp.tools.get_documents.fn("TEST_PROJECT", 2)
+
+            assert "Found 3 documents" in result
+            assert "DOC-1" in result
+            assert "DOC-2" in result
+            assert "DOC-3" not in result
+            assert "...and 1 more." in result
+
+    @pytest.mark.asyncio
+    async def test_get_document(self, mock_settings, mock_driver):
+        """Test get_document tool exports a PDF."""
+        import polarion_mcp.mcp.tools
+
+        mock_doc = Mock(id="DOC-1", title="Document 1", moduleFolder="Specs")
+        mock_doc.moduleName = "Regression"
+        mock_driver.resolve_document.return_value = mock_doc
+        mock_driver.export_document_pdf.return_value = "/tmp/polarion_DOC-1_test.pdf"
+
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            result = await polarion_mcp.mcp.tools.get_document.fn(
+                "TEST_PROJECT", "Specs/Regression"
+            )
+
+            assert isinstance(result, str)
+            assert "Document Details for 'Specs/Regression':" in result
+            assert "ID: DOC-1" in result
+            assert "PDF Path: /tmp/polarion_DOC-1_test.pdf" in result
+            assert "Download Path: /artifacts/" in result
+
+    @pytest.mark.asyncio
+    async def test_get_document_without_body(self, mock_settings, mock_driver):
+        """Test get_document reports PDF export failures clearly."""
+        import polarion_mcp.mcp.tools
+
+        mock_doc = Mock(id="DOC-2", title="Document 2", moduleFolder="Specs")
+        mock_doc.moduleName = "NoBody"
+        mock_driver.resolve_document.return_value = mock_doc
+        mock_driver.export_document_pdf.side_effect = Exception("Export failed")
+
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            result = await polarion_mcp.mcp.tools.get_document.fn(
+                "TEST_PROJECT", "Specs/NoBody"
+            )
+
+            assert "❌ Failed to get document: Export failed" in result
 
     @pytest.mark.asyncio
     async def test_search_workitems_with_named_query(self, mock_settings, mock_driver):

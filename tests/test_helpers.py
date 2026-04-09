@@ -4,7 +4,10 @@ from unittest.mock import Mock
 
 from polarion_mcp.core.config import ConfigManager
 from polarion_mcp.core.formatters import (
+    extract_document_fields,
     extract_workitem_fields,
+    format_document_details,
+    format_multiple_workitem_details,
     format_search_result,
     format_search_results,
     format_workitem_details,
@@ -92,6 +95,38 @@ class TestExtractWorkitemFields:
         assert details["Title"] == "Test Item"
         assert details["Status"] == "N/A"  # Should be N/A due to error
 
+    def test_extract_test_steps_uses_dedicated_api(self):
+        """Test testSteps are read from the dedicated Polarion test step API."""
+        mock_item = Mock()
+        mock_item.id = "TEST-999"
+        mock_item.title = "Verification Test"
+        mock_item.type = Mock(id="verificationTest")
+        mock_item.status = Mock(id="approved")
+        mock_item.author = Mock(id="qa.user")
+        mock_item.created = "2024-01-01"
+        mock_item.description = Mock(content="Verification flow")
+        mock_item.hasTestSteps.return_value = True
+        mock_item.getTestSteps.return_value = [
+            {"step": "Power on", "expectedResult": "Device starts"},
+            {"step": "Run test", "expectedResult": "Results are shown"},
+        ]
+        mock_item.getCustomField.return_value = None
+
+        mock_config = Mock(spec=ConfigManager)
+        mock_config.get_custom_fields.return_value = ["testSteps", "notes"]
+
+        details = extract_workitem_fields(mock_item, "test_project", mock_config)
+
+        assert "Test Steps" in details
+        assert (
+            "1. step: Power on | expectedResult: Device starts" in details["Test Steps"]
+        )
+        assert (
+            "2. step: Run test | expectedResult: Results are shown"
+            in details["Test Steps"]
+        )
+        assert "Custom.testSteps" not in details
+
 
 class TestFormatWorkitemDetails:
     """Test the format_workitem_details formatter function."""
@@ -112,6 +147,19 @@ class TestFormatWorkitemDetails:
         assert "- Title: Test Item" in result
         assert "- Status: open" in result
         assert "- Custom.severity: high" in result
+
+    def test_format_multiple_workitem_details(self):
+        """Test formatting grouped work item results."""
+        result = format_multiple_workitem_details(
+            [
+                ("TEST-1", "Work Item Details for 'TEST-1':\n- ID: TEST-1\n"),
+                ("TEST-2", "Work Item Details for 'TEST-2':\n- ID: TEST-2\n"),
+            ]
+        )
+
+        assert "Work Item Results (2 requested):" in result
+        assert "1.\nWork Item Details for 'TEST-1':" in result
+        assert "2.\nWork Item Details for 'TEST-2':" in result
 
 
 class TestFormatSearchResult:
@@ -300,6 +348,53 @@ class TestTestRunHelpers:
         assert "- Title: Smoke Test" in result
         assert "- Status: running" in result
         assert "- Test Cases: 10" in result
+
+
+class TestDocumentHelpers:
+    """Test formatter functions for documents."""
+
+    def test_extract_document_fields_with_pdf_path(self):
+        """Test document metadata and PDF path extraction."""
+        mock_document = Mock()
+        mock_document.id = "DOC-1"
+        mock_document.title = "Spec"
+        mock_document.moduleFolder = "QA"
+        mock_document.moduleName = "TestSpecs"
+
+        details = extract_document_fields(
+            mock_document, pdf_path="/tmp/polarion_DOC-1_test.pdf"
+        )
+
+        assert details["ID"] == "DOC-1"
+        assert details["Title"] == "Spec"
+        assert details["Location"] == "QA"
+        assert details["Path"] == "QA/DOC-1"
+        assert details["Module Name"] == "TestSpecs"
+        assert details["PDF Path"] == "/tmp/polarion_DOC-1_test.pdf"
+
+    def test_extract_document_fields_without_pdf(self):
+        """Test document PDF-unavailable fallback text."""
+        mock_document = Mock()
+        mock_document.id = "DOC-2"
+        mock_document.title = "Spec"
+        mock_document.moduleFolder = "QA"
+        mock_document.moduleName = "TestSpecs"
+
+        details = extract_document_fields(mock_document, pdf_path=None)
+
+        assert "PDF export could not be created" in details["PDF Export"]
+
+    def test_format_document_details(self):
+        """Test formatting document details."""
+        result = format_document_details(
+            {"ID": "DOC-3", "Title": "Guide", "PDF Path": "/tmp/doc.pdf"},
+            "QA/Guide",
+        )
+
+        assert "Document Details for 'QA/Guide':" in result
+        assert "- ID: DOC-3" in result
+        assert "- Title: Guide" in result
+        assert "- PDF Path: /tmp/doc.pdf" in result
 
 
 class TestWorkItemTypeHelpers:

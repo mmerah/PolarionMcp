@@ -132,15 +132,16 @@ See [docs/WORKFLOW_EXAMPLES.md](docs/WORKFLOW_EXAMPLES.md) for tool usage patter
 ### Work Items *(regular projects)*
 | Tool | Description |
 |------|-------------|
-| `get_workitem` | Full details for a single work item, including custom fields |
-| `search_workitems` | Lucene query search; accepts named queries (`query:open_bugs`) and optional `field_list` |
+| `get_workitem` | Full details for one or more work items, including custom fields and test steps |
+| `search_workitems` | Lucene query search; accepts named queries (`query:open_bugs`), optional `field_list`, and optional `limit` |
 
 ### Test & Documents
 | Tool | Description |
 |------|-------------|
 | `get_test_runs` | List all test runs |
 | `get_test_run` | Details of one test run |
-| `get_documents` | List documents in a project |
+| `get_documents` | List documents in a project, with optional `limit` and document paths |
+| `get_document` | Export a document PDF to `/tmp` and return local path plus artifact download info |
 | `get_test_specs_from_document` | Extract test spec IDs from a document |
 
 ### Plans *(plan projects only)*

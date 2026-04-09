@@ -186,3 +186,56 @@ async def test_get_workitem_no_custom_fields():
 
                 # Verify no custom fields are shown
                 assert "Custom." not in result
+
+
+@pytest.mark.asyncio
+async def test_get_workitem_with_test_steps():
+    """Test get_workitem includes test steps via the dedicated Polarion API."""
+    import polarion_mcp.mcp.tools
+    from polarion_mcp.core.settings import PolarionSettings
+
+    mock_settings = Mock(spec=PolarionSettings)
+    mock_settings.polarion_url = "https://test.com"
+    mock_settings.polarion_user = "test@example.com"
+    mock_settings.polarion_token = "test-token"
+
+    mock_item = Mock()
+    mock_item.id = "TEST-900"
+    mock_item.title = "Verification Test"
+    mock_item.type = Mock(id="verificationTest")
+    mock_item.status = Mock(id="approved")
+    mock_item.author = Mock(id="qa.user")
+    mock_item.created = "2024-01-04"
+    mock_item.description = Mock(content="Test description")
+    mock_item.hasTestSteps.return_value = True
+    mock_item.getTestSteps.return_value = [
+        {"step": "Prepare device", "expectedResult": "Device ready"},
+        {"step": "Execute procedure", "expectedResult": "Procedure succeeds"},
+    ]
+    mock_item.getCustomField.return_value = None
+
+    mock_config = Mock(spec=ConfigManager)
+    mock_config.resolve_project_id.return_value = "TEST_PROJECT"
+    mock_config.get_custom_fields.return_value = ["testSteps", "notes"]
+    mock_config.is_plan_project.return_value = False
+
+    with patch("polarion_mcp.mcp.tools.PolarionDriver") as mock_driver_class:
+        mock_driver = Mock()
+        mock_driver_class.return_value.__enter__.return_value = mock_driver
+        mock_driver.get_workitem.return_value = mock_item
+
+        with patch("polarion_mcp.mcp.tools.settings", mock_settings):
+            with patch("polarion_mcp.mcp.tools.config_manager", mock_config):
+                result = await polarion_mcp.mcp.tools.get_workitem.fn(
+                    "TEST_PROJECT", "TEST-900"
+                )
+
+                assert "Test Steps:" in result
+                assert (
+                    "1. step: Prepare device | expectedResult: Device ready" in result
+                )
+                assert (
+                    "2. step: Execute procedure | expectedResult: Procedure succeeds"
+                    in result
+                )
+                assert "Custom.testSteps" not in result

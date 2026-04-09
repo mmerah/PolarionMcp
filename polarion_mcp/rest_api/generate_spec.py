@@ -34,14 +34,24 @@ _ERROR_RESPONSES: dict[tuple[str, str], dict[str, str]] = {
     ("GET", "/actions/projects/{project_alias}/workitems/{workitem_id}"): {
         "404": "Work item not found",
     },
+    ("POST", "/actions/projects/{project_alias}/workitems/get"): {
+        "400": "Invalid request",
+    },
     ("POST", "/actions/projects/{project_alias}/workitems/search"): {
         "400": "Invalid request",
+    },
+    ("GET", "/actions/projects/{project_alias}/documents"): {
+        "400": "Invalid limit supplied",
     },
     ("GET", "/actions/projects/{project_alias}/workitems/discover"): {
         "400": "Invalid limit supplied",
     },
     ("GET", "/actions/projects/{project_alias}/test-runs/{test_run_id}"): {
         "404": "Test run not found",
+    },
+    ("GET", "/actions/projects/{project_alias}/documents/content"): {
+        "400": "Missing document path",
+        "404": "Document not found",
     },
     ("GET", "/actions/projects/{project_alias}/documents/test-specs"): {
         "400": "Missing document path",
@@ -66,6 +76,24 @@ _QUERY_PARAMS: dict[tuple[str, str], list[dict[str, Any]]] = {
             "in": "query",
             "required": False,
             "description": "Maximum number of items to sample.",
+            "schema": {"type": "integer", "minimum": 1},
+        },
+    ],
+    ("GET", "/actions/projects/{project_alias}/documents/content"): [
+        {
+            "name": "document_path",
+            "in": "query",
+            "required": True,
+            "description": "Document path such as `QA/TestSpecs`.",
+            "schema": {"type": "string"},
+        },
+    ],
+    ("GET", "/actions/projects/{project_alias}/documents"): [
+        {
+            "name": "limit",
+            "in": "query",
+            "required": False,
+            "description": "Maximum number of documents to display.",
             "schema": {"type": "integer", "minimum": 1},
         },
     ],
@@ -133,6 +161,28 @@ _COMPONENTS: dict[str, Any] = {
                     "type": "string",
                     "description": "Optional comma-separated list of fields to include.",
                 },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Optional maximum number of results to fetch and display.",
+                },
+            },
+        },
+        "GetWorkitemsRequest": {
+            "type": "object",
+            "required": ["workitem_id"],
+            "properties": {
+                "workitem_id": {
+                    "description": "Single work item ID or a list of work item IDs.",
+                    "oneOf": [
+                        {"type": "string"},
+                        {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "minItems": 1,
+                        },
+                    ],
+                },
             },
         },
         "SearchPlansRequest": {
@@ -152,6 +202,7 @@ _COMPONENTS: dict[str, Any] = {
 
 # Map POST route → request body $ref.
 _REQUEST_BODY_REFS: dict[str, str] = {
+    "/actions/projects/{project_alias}/workitems/get": "#/components/schemas/GetWorkitemsRequest",
     "/actions/projects/{project_alias}/workitems/search": "#/components/schemas/SearchWorkitemsRequest",
     "/actions/projects/{project_alias}/plans/search": "#/components/schemas/SearchPlansRequest",
 }
@@ -169,6 +220,17 @@ def _action_response_ref() -> dict[str, Any]:
             "application/json": {
                 "schema": {"$ref": "#/components/schemas/ActionResponse"},
             },
+        },
+    }
+
+
+def _artifact_response() -> dict[str, Any]:
+    return {
+        "description": "Downloadable PDF artifact.",
+        "content": {
+            "application/pdf": {
+                "schema": {"type": "string", "format": "binary"},
+            }
         },
     }
 
@@ -251,6 +313,27 @@ async def _build_spec() -> dict[str, Any]:
         if route not in paths:
             paths[route] = {}
         paths[route][method] = operation
+
+    paths["/artifacts/{artifact_id}"] = {
+        "get": {
+            "summary": "Download a temporary PDF artifact.",
+            "description": "Streams a previously generated PDF artifact by ID.",
+            "operationId": "downloadArtifact",
+            "parameters": [
+                {
+                    "name": "artifact_id",
+                    "in": "path",
+                    "required": True,
+                    "description": "Temporary server-side artifact identifier.",
+                    "schema": {"type": "string"},
+                }
+            ],
+            "responses": {
+                "200": _artifact_response(),
+                "404": {"description": "Artifact not found or expired."},
+            },
+        }
+    }
 
     return {
         "openapi": "3.1.0",

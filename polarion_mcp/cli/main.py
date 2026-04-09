@@ -12,11 +12,12 @@ Usage
   mcp-polarion project-types  --project <alias>
   mcp-polarion named-queries  --project <alias>
   mcp-polarion discover-types --project <alias> [--limit N]
-  mcp-polarion get            <WORKITEM-ID>  [--project <alias>]
-  mcp-polarion search         <QUERY>        --project <alias> [--fields f1,f2]
+  mcp-polarion get            <WORKITEM-ID> [<WORKITEM-ID> ...] [--project <alias>]
+  mcp-polarion search         <QUERY>        --project <alias> [--fields f1,f2] [--limit N]
   mcp-polarion test-runs      --project <alias>
   mcp-polarion test-run       <TEST-RUN-ID>  --project <alias>
-  mcp-polarion documents      --project <alias>
+  mcp-polarion documents      --project <alias> [--limit N]
+  mcp-polarion document       <DOCUMENT-ID>  --project <alias>
   mcp-polarion test-specs     <DOCUMENT-ID>  --project <alias>
   mcp-polarion plans          --project <alias>
   mcp-polarion plan           <PLAN-ID>      --project <alias>
@@ -71,6 +72,30 @@ def _resolve_project(workitem_id: str, explicit_project: str | None) -> str:
     sys.exit(1)
 
 
+def _resolve_project_for_ids(
+    workitem_ids: list[str], explicit_project: str | None
+) -> str:
+    """Resolve the project for one or more work item IDs."""
+    if explicit_project:
+        return explicit_project
+
+    if not workitem_ids:
+        print("At least one work item ID is required.", file=sys.stderr)
+        sys.exit(1)
+
+    first_project = _resolve_project(workitem_ids[0], None)
+    prefixes = {wid.split("-")[0] for wid in workitem_ids if "-" in wid}
+    if len(prefixes) > 1:
+        print(
+            "Cannot infer a single project for mixed work item prefixes. "
+            "Please specify --project <alias>.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return first_project
+
+
 # ---------------------------------------------------------------------------
 # Tool subcommands
 # ---------------------------------------------------------------------------
@@ -115,14 +140,17 @@ def _cmd_discover_types(args: argparse.Namespace) -> None:
 def _cmd_get(args: argparse.Namespace) -> None:
     from polarion_mcp.mcp.tools import get_workitem
 
-    project = _resolve_project(args.workitem_id, args.project)
-    _run(get_workitem.fn(project, args.workitem_id))
+    project = _resolve_project_for_ids(args.workitem_id, args.project)
+    workitem_arg = (
+        args.workitem_id[0] if len(args.workitem_id) == 1 else args.workitem_id
+    )
+    _run(get_workitem.fn(project, workitem_arg))
 
 
 def _cmd_search(args: argparse.Namespace) -> None:
     from polarion_mcp.mcp.tools import search_workitems
 
-    _run(search_workitems.fn(args.project, args.query, args.fields or None))
+    _run(search_workitems.fn(args.project, args.query, args.fields or None, args.limit))
 
 
 def _cmd_test_runs(args: argparse.Namespace) -> None:
@@ -140,7 +168,13 @@ def _cmd_test_run(args: argparse.Namespace) -> None:
 def _cmd_documents(args: argparse.Namespace) -> None:
     from polarion_mcp.mcp.tools import get_documents
 
-    _run(get_documents.fn(args.project))
+    _run(get_documents.fn(args.project, args.limit))
+
+
+def _cmd_document(args: argparse.Namespace) -> None:
+    from polarion_mcp.mcp.tools import get_document
+
+    _run(get_document.fn(args.project, args.document_id))
 
 
 def _cmd_test_specs(args: argparse.Namespace) -> None:
@@ -286,13 +320,30 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p_docs = sub.add_parser("documents", help="List documents.")
     project_arg(p_docs)
+    p_docs.add_argument(
+        "--limit",
+        "-n",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Maximum number of documents to display.",
+    )
+
+    p_doc = sub.add_parser("document", help="Get document details and content.")
+    p_doc.add_argument("document_id", metavar="DOCUMENT-ID", help="e.g. QA/TestSpecs")
+    project_arg(p_doc)
 
     p_plans = sub.add_parser("plans", help="List plans (plan projects only).")
     project_arg(p_plans)
 
     # ---- project + ID tools -------------------------------------------------
     p_get = sub.add_parser("get", help="Get a work item by ID.")
-    p_get.add_argument("workitem_id", metavar="WORKITEM-ID", help="e.g. ADC-1234")
+    p_get.add_argument(
+        "workitem_id",
+        metavar="WORKITEM-ID",
+        nargs="+",
+        help="e.g. ADC-1234",
+    )
     project_arg(p_get, required=False)  # can be inferred from ID prefix
 
     p_tr = sub.add_parser("test-run", help="Get test run details.")
@@ -324,6 +375,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "-f",
         metavar="FIELDS",
         help='Comma-separated fields, e.g. "id,title,status,customFields.severity".',
+    )
+    p_search.add_argument(
+        "--limit",
+        "-n",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Maximum number of results to fetch and display.",
     )
 
     p_sp = sub.add_parser("search-plans", help="Search plans (plan projects only).")
@@ -416,6 +475,7 @@ def main() -> None:
         "test-runs": _cmd_test_runs,
         "test-run": _cmd_test_run,
         "documents": _cmd_documents,
+        "document": _cmd_document,
         "test-specs": _cmd_test_specs,
         "plans": _cmd_plans,
         "plan": _cmd_plan,

@@ -24,8 +24,9 @@ from fastmcp.exceptions import NotFoundError, ToolError
 from mcp.types import TextContent
 from starlette import status
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import FileResponse, JSONResponse, Response
 
+from polarion_mcp.core.artifacts import artifact_store
 from polarion_mcp.mcp.tools import mcp
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,7 @@ TOOL_ROUTE_MAP: dict[tuple[str, str], str] = {
         "GET",
         "/actions/projects/{project_alias}/workitems/{workitem_id}",
     ): "get_workitem",
+    ("POST", "/actions/projects/{project_alias}/workitems/get"): "get_workitem",
     ("POST", "/actions/projects/{project_alias}/workitems/search"): "search_workitems",
     (
         "GET",
@@ -57,6 +59,7 @@ TOOL_ROUTE_MAP: dict[tuple[str, str], str] = {
         "/actions/projects/{project_alias}/test-runs/{test_run_id}",
     ): "get_test_run",
     ("GET", "/actions/projects/{project_alias}/documents"): "get_documents",
+    ("GET", "/actions/projects/{project_alias}/documents/content"): "get_document",
     (
         "GET",
         "/actions/projects/{project_alias}/documents/test-specs",
@@ -150,6 +153,7 @@ def _error_response(
     return JSONResponse(body, status_code=status_code)
 
 
+
 @mcp.custom_route("/actions/health", methods=["GET"])
 async def health_action(request: Request) -> JSONResponse:
     payload = await _run_tool("health_check", {})
@@ -213,6 +217,51 @@ async def get_workitem_action(request: Request) -> JSONResponse:
 
 
 @mcp.custom_route(
+    "/actions/projects/{project_alias}/workitems/get",
+    methods=["POST"],
+)
+async def get_workitems_action(request: Request) -> JSONResponse:
+    project_alias = request.path_params["project_alias"]
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return _error_response(
+            "get_workitem",
+            "Request body must be valid JSON.",
+        )
+
+    workitem_id = body.get("workitem_id")
+    if isinstance(workitem_id, str):
+        if not workitem_id.strip():
+            return _error_response(
+                "get_workitem",
+                "The 'workitem_id' field must not be empty.",
+            )
+    elif isinstance(workitem_id, list):
+        if not workitem_id or not all(
+            isinstance(item, str) and item.strip() for item in workitem_id
+        ):
+            return _error_response(
+                "get_workitem",
+                "The 'workitem_id' field must be a non-empty string or a non-empty list of non-empty strings.",
+            )
+    else:
+        return _error_response(
+            "get_workitem",
+            "The 'workitem_id' field is required and must be a string or list of strings.",
+        )
+
+    payload = await _run_tool(
+        "get_workitem",
+        {
+            "project_alias": project_alias,
+            "workitem_id": workitem_id,
+        },
+    )
+    return JSONResponse(payload)
+
+
+@mcp.custom_route(
     "/actions/projects/{project_alias}/workitems/search",
     methods=["POST"],
 )
@@ -238,6 +287,13 @@ async def search_workitems_action(request: Request) -> JSONResponse:
             "search_workitems",
             "The 'field_list' field must be a comma-separated string when provided.",
         )
+    limit = body.get("limit")
+    if limit is not None:
+        if not isinstance(limit, int) or limit <= 0:
+            return _error_response(
+                "search_workitems",
+                "The 'limit' field must be a positive integer when provided.",
+            )
 
     payload = await _run_tool(
         "search_workitems",
@@ -245,6 +301,7 @@ async def search_workitems_action(request: Request) -> JSONResponse:
             "project_alias": project_alias,
             "query": query,
             "field_list": field_list,
+            "limit": limit,
         },
     )
     return JSONResponse(payload)
@@ -305,8 +362,62 @@ async def get_test_run_action(request: Request) -> JSONResponse:
 @mcp.custom_route("/actions/projects/{project_alias}/documents", methods=["GET"])
 async def list_documents_action(request: Request) -> JSONResponse:
     project_alias = request.path_params["project_alias"]
-    payload = await _run_tool("get_documents", {"project_alias": project_alias})
+    limit_param = request.query_params.get("limit")
+    arguments: dict[str, Any] = {"project_alias": project_alias}
+    if limit_param is not None:
+        try:
+            limit = int(limit_param)
+            if limit <= 0:
+                raise ValueError
+        except ValueError:
+            return _error_response(
+                "get_documents",
+                "Query parameter 'limit' must be a positive integer when supplied.",
+            )
+        arguments["limit"] = limit
+
+    payload = await _run_tool("get_documents", arguments)
     return JSONResponse(payload)
+
+
+@mcp.custom_route(
+    "/actions/projects/{project_alias}/documents/content",
+    methods=["GET"],
+)
+async def get_document_action(request: Request) -> JSONResponse:
+    project_alias = request.path_params["project_alias"]
+    document_path = request.query_params.get("document_path")
+    if not document_path:
+        return _error_response(
+            "get_document",
+            "Query parameter 'document_path' is required.",
+        )
+    payload = await _run_tool(
+        "get_document",
+        {"project_alias": project_alias, "document_id": document_path},
+    )
+    status_code = (
+        status.HTTP_200_OK if "error" not in payload else status.HTTP_404_NOT_FOUND
+    )
+    return JSONResponse(payload, status_code=status_code)
+
+
+@mcp.custom_route("/artifacts/{artifact_id}", methods=["GET"])
+async def download_artifact_action(request: Request) -> Response:
+    artifact_id = request.path_params["artifact_id"]
+    artifact = artifact_store.get(artifact_id)
+    if artifact is None:
+        return Response(
+            "Artifact not found or expired.",
+            status_code=status.HTTP_404_NOT_FOUND,
+            media_type="text/plain",
+        )
+
+    return FileResponse(
+        path=artifact.path,
+        media_type="application/pdf",
+        filename=artifact.filename,
+    )
 
 
 @mcp.custom_route(

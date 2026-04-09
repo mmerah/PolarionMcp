@@ -3,6 +3,7 @@ Formatter functions — convert raw Polarion API objects into human-readable str
 """
 
 import re
+from collections.abc import Sequence
 from typing import Any, Dict, List, Optional, Tuple
 
 from polarion_mcp.core.config import ConfigManager
@@ -73,6 +74,12 @@ def extract_workitem_fields(
         if custom_fields:
             for field_name in custom_fields:
                 try:
+                    if field_name == "testSteps":
+                        test_steps = _extract_test_steps(item)
+                        if test_steps is not None:
+                            details["Test Steps"] = test_steps
+                        continue
+
                     # Use getCustomField method if available (real Polarion objects)
                     if hasattr(item, "getCustomField"):
                         value = item.getCustomField(field_name)
@@ -96,6 +103,42 @@ def extract_workitem_fields(
         pass
 
     return details
+
+
+def _extract_test_steps(item: Any) -> str | None:
+    """Extract test steps using the dedicated Polarion API when available."""
+    if not hasattr(item, "hasTestSteps") or not hasattr(item, "getTestSteps"):
+        return None
+
+    try:
+        if not item.hasTestSteps():
+            return None
+
+        steps = item.getTestSteps()
+        if not steps:
+            return None
+
+        return _format_test_steps(steps)
+    except Exception:
+        return None
+
+
+def _format_test_steps(steps: Sequence[Any]) -> str:
+    """Format test steps into a readable multi-line string."""
+    lines: List[str] = []
+
+    for index, step in enumerate(steps, 1):
+        if isinstance(step, dict):
+            parts = []
+            for key, value in step.items():
+                parts.append(f"{key}: {value}")
+            step_text = " | ".join(parts) if parts else "No values"
+        else:
+            step_text = str(step)
+
+        lines.append(f"{index}. {step_text}")
+
+    return "\n  ".join(lines)
 
 
 def _extract_linked_workitems(item: Any) -> List[Tuple[str, str, str]]:
@@ -175,6 +218,24 @@ def format_workitem_details(details: Dict[str, str], workitem_id: str) -> str:
     return output
 
 
+def format_multiple_workitem_details(results: List[Tuple[str, str]]) -> str:
+    """
+    Format multiple work item responses into grouped sections.
+
+    Args:
+        results: List of tuples containing the requested ID and formatted result
+
+    Returns:
+        Combined formatted string
+    """
+    output = f"Work Item Results ({len(results)} requested):\n\n"
+    for index, (_, result) in enumerate(results, 1):
+        output += f"{index}.\n{result.strip()}\n"
+        if index < len(results):
+            output += "\n"
+    return output
+
+
 def format_search_result(item: Dict[str, Any], requested_fields: List[str]) -> str:
     """
     Format a single search result item into a readable string.
@@ -210,6 +271,7 @@ def format_search_results(
     actual_project_id: str,
     requested_fields: List[str],
     max_items: int = 20,
+    has_more: bool = False,
 ) -> str:
     """
     Format search results into a readable string.
@@ -238,6 +300,8 @@ def format_search_results(
         output += f" for named query '{query}'"
     else:
         output += f" for query '{query}'"
+    if has_more:
+        output += f" (showing first {len(results)}; more exist)"
     output += ":\n\n"
 
     for i, item in enumerate(results[:max_items], 1):
@@ -259,6 +323,8 @@ def format_search_results(
 
     if len(results) > max_items:
         output += f"\n...and {len(results) - max_items} more."
+    elif has_more:
+        output += "\n...and more beyond the configured limit."
 
     return output
 
@@ -322,6 +388,58 @@ def format_test_run_details(details: Dict[str, str], test_run_id: str) -> str:
         Formatted string with test run details
     """
     output = f"Test Run Details for '{test_run_id}':\n"
+    for key, value in details.items():
+        output += f"- {key}: {value}\n"
+    return output
+
+
+def extract_document_fields(
+    document: Any, pdf_path: str | None = None
+) -> Dict[str, str]:
+    """
+    Extract document metadata and PDF export details when available.
+
+    Args:
+        document: Document object from Polarion
+
+    Returns:
+        Dictionary of field names to values
+    """
+    details = {
+        "ID": getattr(document, "id", "N/A"),
+        "Title": getattr(document, "title", "N/A"),
+        "Location": getattr(document, "moduleFolder", "N/A"),
+    }
+    location = getattr(document, "moduleFolder", None)
+    document_id = getattr(document, "id", None)
+    if location and document_id:
+        details["Path"] = f"{location}/{document_id}"
+
+    if hasattr(document, "moduleName"):
+        details["Module Name"] = str(getattr(document, "moduleName", "N/A"))
+
+    if pdf_path is not None:
+        details["PDF Path"] = pdf_path
+    else:
+        details["PDF Export"] = (
+            "PDF export could not be created for this document."
+        )
+
+    return details
+
+
+def format_document_details(details: Dict[str, str], document_id: str) -> str:
+    """
+    Format document details into a readable string.
+
+    Args:
+        details: Dictionary of field names to values
+        document_id: The document identifier for the header
+
+    Returns:
+        Formatted string with document details
+    """
+    output = f"Document Details for '{document_id}':\n"
     for key, value in details.items():
         output += f"- {key}: {value}\n"
     return output
