@@ -1,161 +1,52 @@
-import json
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class WellKnownFilter:
+class MCPPathFix:
     """
-    ASGI middleware that returns 404 for .well-known paths under the MCP mount.
+    ASGI middleware applied to the MCP HTTP server.
 
-    Without this, Starlette's Mount("/mcp") catches requests like
-    /mcp/.well-known/openid-configuration and the MCP handler returns 406,
-    which makes clients (e.g. Claude Code) think OAuth is misconfigured
-    instead of absent.
-    """
+    Handles two quirks:
 
-    def __init__(self, app):
-        self.app = app
+    1. Trailing-slash redirect — Starlette redirects POST /mcp → /mcp/ with 307,
+       which clients (Copilot Studio, etc.) do not follow for POST requests.
+       Normalise the path before it reaches the router so the redirect never fires.
 
-    async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and "/.well-known/" in scope["path"]:
-            await send(
-                {
-                    "type": "http.response.start",
-                    "status": 404,
-                    "headers": [(b"content-type", b"text/plain")],
-                }
-            )
-            await send(
-                {
-                    "type": "http.response.body",
-                    "body": b"Not Found",
-                    "more_body": False,
-                }
-            )
-            return
-        await self.app(scope, receive, send)
-
-
-class CopilotStudioIDFix:
-    """
-    ASGI middleware that fixes JSON-RPC ID type mismatches for Microsoft Copilot Studio.
-    Copilot Studio may send a string ID but expect an integer ID back in the response,
-    or vice-versa. This middleware intercepts the request to check the ID type and
-    buffers the response to ensure the response ID type matches the request ID type.
+    2. .well-known paths — Starlette's Mount("/mcp") catches requests like
+       /mcp/.well-known/openid-configuration and the MCP handler returns 406,
+       which makes clients (e.g. Claude Code) think OAuth is misconfigured
+       instead of absent. Return 404 immediately.
     """
 
     def __init__(self, app):
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or not scope["path"].startswith("/mcp"):
+        if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
-        # Request state
-        request_id_is_string = False
-        request_id_value = None
+        path = scope.get("path", "")
 
-        # Buffer the entire request body
-        buffered_messages = []
-        request_body = b""
-        more_body = True
+        # /mcp/.well-known/* → 404
+        if "/.well-known/" in path:
+            await send({
+                "type": "http.response.start",
+                "status": 404,
+                "headers": [(b"content-type", b"text/plain")],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": b"Not Found",
+                "more_body": False,
+            })
+            return
 
-        while more_body:
-            message = await receive()
-            buffered_messages.append(message)
-            if message["type"] == "http.request":
-                request_body += message.get("body", b"")
-                more_body = message.get("more_body", False)
+        # /mcp → /mcp/ (prevent 307 redirect)
+        if path == "/mcp":
+            scope = dict(scope)
+            scope["path"] = "/mcp/"
+            scope["raw_path"] = b"/mcp/"
 
-        # Parse request to check ID type
-        if request_body:
-            try:
-                data = json.loads(request_body)
-                request_id = data.get("id")
-                if request_id is not None:
-                    request_id_value = str(request_id)
-                    request_id_is_string = isinstance(request_id, str)
-            except json.JSONDecodeError:
-                logger.warning("Could not parse request body as JSON.")
-
-        # Replay the request messages for the app
-        message_idx = 0
-
-        async def receive_replay():
-            nonlocal message_idx
-            if message_idx < len(buffered_messages):
-                msg = buffered_messages[message_idx]
-                message_idx += 1
-                return msg
-            return await receive()
-
-        # Response state
-        response_body_chunks = []
-        response_headers = []
-        response_status = 200
-
-        async def send_wrapper(message):
-            nonlocal response_status, response_headers
-
-            if message["type"] == "http.response.start":
-                response_status = message["status"]
-                response_headers = list(message.get("headers", []))
-
-            elif message["type"] == "http.response.body":
-                response_body_chunks.append(message.get("body", b""))
-
-                if not message.get("more_body", False):
-                    # Finalize and send the complete response
-                    full_body = b"".join(response_body_chunks)
-
-                    # Fix ID type if needed
-                    if request_id_value and full_body:
-                        try:
-                            data = json.loads(full_body)
-                            if "id" in data and str(data["id"]) == request_id_value:
-                                if request_id_is_string and not isinstance(
-                                    data["id"], str
-                                ):
-                                    logger.info(
-                                        f"Copilot ID Fix: Converting response ID {data['id']} to string."
-                                    )
-                                    data["id"] = str(data["id"])
-                                    full_body = json.dumps(data).encode("utf-8")
-                                elif not request_id_is_string and isinstance(
-                                    data["id"], str
-                                ):
-                                    logger.info(
-                                        f"Copilot ID Fix: Converting response ID '{data['id']}' to integer."
-                                    )
-                                    data["id"] = int(data["id"])
-                                    full_body = json.dumps(data).encode("utf-8")
-                        except (json.JSONDecodeError, ValueError):
-                            pass
-
-                    # Update content-length
-                    final_headers = []
-                    for name, value in response_headers:
-                        if name.lower() == b"content-length":
-                            value = str(len(full_body)).encode()
-                        final_headers.append((name, value))
-
-                    await send(
-                        {
-                            "type": "http.response.start",
-                            "status": response_status,
-                            "headers": final_headers,
-                        }
-                    )
-                    await send(
-                        {
-                            "type": "http.response.body",
-                            "body": full_body,
-                            "more_body": False,
-                        }
-                    )
-            else:
-                await send(message)
-
-        await self.app(scope, receive_replay, send_wrapper)
+        await self.app(scope, receive, send)

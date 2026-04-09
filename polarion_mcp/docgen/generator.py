@@ -302,7 +302,7 @@ async def generate_markdown(variant: Variant) -> str:
         "",
         "- Short, plain-language explanations focused on outcomes and decisions.",
         "- Use sections such as Summary, Key Findings, Evidence (tables/IDs), and Next Steps when appropriate.",
-        "- Offer optional next actions (e.g., "Expand to linked defects?", "Open coverage gaps?").",
+        "- Offer optional next actions (e.g., \"Expand to linked defects?\", \"Open coverage gaps?\").",
         "- Prefer tables or canvas sketches to images; primary data authority is the Polarion MCP connection.",
         "",
         "## Available Tools",

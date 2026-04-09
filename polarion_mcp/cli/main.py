@@ -22,7 +22,7 @@ Usage
   mcp-polarion plan           <PLAN-ID>      --project <alias>
   mcp-polarion plan-workitems <PLAN-ID>      --project <alias>
   mcp-polarion search-plans   [<QUERY>]      --project <alias>
-  mcp-polarion serve          [--mode http|copilot|gpt|stdio] [--host H] [--port P]
+  mcp-polarion serve          [--mode http|stdio] [--host H] [--port P]
   mcp-polarion docgen         [--variant full|simple|all] [--output PATH]
   mcp-polarion generate-openapi [--output PATH]
 """
@@ -161,7 +161,7 @@ def _cmd_serve(args: argparse.Namespace) -> None:
         mcp.run(transport="stdio")
     else:
         from polarion_mcp.mcp.server import run
-        run(mode=args.mode, host=args.host, port=args.port, log_level=args.log_level)  # type: ignore[arg-type]
+        run(host=args.host, port=args.port, log_level=args.log_level)
 
 
 def _cmd_docgen(args: argparse.Namespace) -> None:
@@ -268,9 +268,9 @@ def _build_parser() -> argparse.ArgumentParser:
     project_arg(p_sp)
 
     # ---- serve / utilities --------------------------------------------------
-    p_serve = sub.add_parser("serve", help="Start an MCP or REST server.")
-    p_serve.add_argument("--mode", choices=["http", "copilot", "gpt", "stdio"], default="http",
-                         help="http (default), copilot, gpt, or stdio.")
+    p_serve = sub.add_parser("serve", help="Start the MCP + GPT Actions server.")
+    p_serve.add_argument("--mode", choices=["http", "stdio"], default="http",
+                         help="http (default): MCP + GPT Actions over HTTP; stdio: MCP over stdio.")
     p_serve.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0).")
     p_serve.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000).")
     p_serve.add_argument("--log-level", default="INFO",

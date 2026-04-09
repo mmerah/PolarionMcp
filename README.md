@@ -52,9 +52,7 @@ mcp-polarion plan-workitems R2024.4  -p releases
 mcp-polarion search-plans "templateId:release"  -p releases
 
 # Servers
-mcp-polarion serve                          # HTTP — Cline / Claude Code
-mcp-polarion serve --mode copilot           # Microsoft Copilot Studio
-mcp-polarion serve --mode gpt               # HTTP + GPT Actions REST routes
+mcp-polarion serve                          # HTTP — works for all clients
 mcp-polarion serve --mode stdio             # stdio transport (.mcp.json)
 mcp-polarion serve --port 9000 --log-level DEBUG
 
@@ -140,24 +138,24 @@ See [XML_PARSER.md](XML_PARSER.md) for importing custom field definitions from P
 
 ## MCP Server Integration
 
-### Cline / Claude Code (HTTP transport)
+A single `mcp-polarion serve` command serves all HTTP clients. The server uses stateless requests (one session per POST) and JSON responses, which enables parallel tool calls and works equally well with Cline, Claude Code, Copilot Studio, and GPT Actions.
+
+### Cline / Claude Code (HTTP)
 
 ```bash
-mcp-polarion serve          # starts on http://0.0.0.0:8000/mcp
+mcp-polarion serve          # http://0.0.0.0:8000/mcp
 ```
 
 Add to Cline's MCP settings:
 ```json
 {
   "mcpServers": {
-    "polarion": {
-      "url": "http://localhost:8000/mcp"
-    }
+    "polarion": { "url": "http://localhost:8000/mcp" }
   }
 }
 ```
 
-### Claude Code / `.mcp.json` (stdio transport)
+### Claude Code / `.mcp.json` (stdio)
 
 ```json
 {
@@ -173,26 +171,20 @@ Add to Cline's MCP settings:
 ### Microsoft Copilot Studio
 
 ```bash
-mcp-polarion serve --mode copilot
+mcp-polarion serve
 ```
 
-Expose the server over HTTPS (e.g. Azure Dev Tunnel), then follow the [MCP onboarding wizard](https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-add-existing-server-to-agent): **Add a tool → New tool → Model Context Protocol**. Use `https://<your-host>/mcp` as the server URL and set the description to something meaningful — Copilot Studio's orchestrator uses it to decide when to invoke your server.
-
-`copilot` mode applies CORS and `CopilotStudioIDFix` middleware, which normalises JSON-RPC response IDs to match the type Copilot Studio sends in requests (string vs integer mismatch causes dropped responses).
+Expose over HTTPS (e.g. Azure Dev Tunnel), then follow the [MCP onboarding wizard](https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-add-existing-server-to-agent): **Add a tool → New tool → Model Context Protocol**. Use `https://<your-host>/mcp` as the server URL.
 
 ### GPT Actions (OpenAI)
 
 ```bash
-mcp-polarion serve --mode gpt
+mcp-polarion serve
 ```
 
-This mode adds REST endpoints under `/actions/` for every MCP tool. The OpenAPI spec at `/openapi.json` (or `openapi.yaml` in the repo root) describes all routes.
+REST endpoints are available at `/actions/` alongside the MCP endpoint. The OpenAPI spec at `/openapi.json` (or regenerate with `mcp-polarion generate-openapi`) describes all routes.
 
 ```bash
-# Regenerate the spec after adding/removing tools
-mcp-polarion generate-openapi
-
-# Verify locally
 curl http://localhost:8000/actions/projects
 curl http://localhost:8000/openapi.json | jq '.paths | keys'
 ```
