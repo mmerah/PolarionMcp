@@ -4,6 +4,39 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class WellKnownFilter:
+    """
+    ASGI middleware that returns 404 for .well-known paths under the MCP mount.
+
+    Without this, Starlette's Mount("/mcp") catches requests like
+    /mcp/.well-known/openid-configuration and the MCP handler returns 406,
+    which makes clients (e.g. Claude Code) think OAuth is misconfigured
+    instead of absent.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and "/.well-known/" in scope["path"]:
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 404,
+                    "headers": [(b"content-type", b"text/plain")],
+                }
+            )
+            await send(
+                {
+                    "type": "http.response.body",
+                    "body": b"Not Found",
+                    "more_body": False,
+                }
+            )
+            return
+        await self.app(scope, receive, send)
+
+
 class CopilotStudioIDFix:
     """
     ASGI middleware that fixes JSON-RPC ID type mismatches for Microsoft Copilot Studio.

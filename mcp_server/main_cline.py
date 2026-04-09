@@ -9,7 +9,7 @@ import uvicorn
 # Add project root to path to allow imports from lib
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from mcp_server.middleware import CopilotStudioIDFix  # noqa: E402
+from mcp_server.middleware import CopilotStudioIDFix, WellKnownFilter  # noqa: E402
 from mcp_server.settings import settings  # noqa: E402
 from mcp_server.tools import mcp  # noqa: E402
 
@@ -24,9 +24,10 @@ if COPILOT_STUDIO_MODE:
     # Wrap the app with the crucial middleware for Copilot Studio compatibility
     app = CopilotStudioIDFix(app)  # type: ignore[assignment]
 else:
-    # Standard MCP configuration for Cline and other MCP clients
-    # Cline uses SSE transport for remote servers
-    app = mcp.http_app(path="/mcp", transport="sse")
+    # Standard MCP configuration for Claude Code, Cline, and other MCP clients
+    app = mcp.http_app(path="/mcp", transport="streamable-http")
+    # Prevent .well-known paths from hitting the MCP handler (returns 406 → confuses OAuth discovery)
+    app = WellKnownFilter(app)  # type: ignore[assignment]
 
 # --- Main Execution ---
 
