@@ -15,6 +15,33 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_CONFIG_CANDIDATES = [
+    "local/polarion_config.yaml",
+    "local/polarion_config.yml",
+    "local/polarion_config.json",
+    "polarion_config.yaml",
+    "polarion_config.yml",
+    "polarion_config.json",
+]
+
+
+def find_config_path(config_path: Optional[str] = None) -> Optional[Path]:
+    """Find the configured Polarion config path."""
+    if config_path:
+        return Path(config_path)
+
+    env_path = os.getenv("POLARION_CONFIG_PATH")
+    if env_path:
+        return Path(env_path)
+
+    for filename in DEFAULT_CONFIG_CANDIDATES:
+        path = Path(filename)
+        if path.exists():
+            return path
+
+    return None
+
+
 class ProjectConfig(BaseModel):
     """Configuration for a single Polarion project."""
 
@@ -44,10 +71,10 @@ class ConfigManager:
         Args:
             config_path: Path to configuration file. If None, looks for:
                         1. Environment variable POLARION_CONFIG_PATH
-                        2. ./polarion_config.yaml
-                        3. ./polarion_config.json
+                        2. ./local/polarion_config.yaml
+                        3. ./polarion_config.yaml
         """
-        self.config_path = self._find_config_path(config_path)
+        self.config_path = find_config_path(config_path)
         self.config: PolarionConfig = PolarionConfig()
         # alias -> id
         self._project_id_map: Dict[str, str] = {}
@@ -58,28 +85,6 @@ class ConfigManager:
             self.load_config()
         else:
             logger.info("No configuration file found. Using defaults.")
-
-    def _find_config_path(self, config_path: Optional[str]) -> Optional[Path]:
-        """Find the configuration file path."""
-        if config_path:
-            return Path(config_path)
-
-        # Check environment variable
-        env_path = os.getenv("POLARION_CONFIG_PATH")
-        if env_path:
-            return Path(env_path)
-
-        # Check default locations
-        for filename in [
-            "polarion_config.yaml",
-            "polarion_config.yml",
-            "polarion_config.json",
-        ]:
-            path = Path(filename)
-            if path.exists():
-                return path
-
-        return None
 
     def load_config(self) -> None:
         """Load configuration from file."""

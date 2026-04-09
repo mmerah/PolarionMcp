@@ -10,10 +10,13 @@ __pycache__/
 environment.yml
 
 # User configuration
+.mcp.json
 polarion_config.yaml
 polarion_config.yml
-polarion_config.yaml.bak
-polarion_config.yml.bak
+local/polarion_config.yaml
+local/polarion_config.yml
+local/custom-fields/*
+!local/custom-fields/.gitkeep
 
 # Generated files (openapi.yaml, agent_instructions, etc.)
 generated/*
@@ -70,9 +73,6 @@ coverage.xml
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-
-# SSL Certificates
-certs/*.pem
 
 # IDE files
 .vscode/

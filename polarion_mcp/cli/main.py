@@ -25,6 +25,8 @@ Usage
   mcp-polarion serve          [--mode http|stdio] [--host H] [--port P]
   mcp-polarion docgen         [--variant full|simple|all] [--output PATH]
   mcp-polarion generate-openapi [--output PATH]
+  mcp-polarion import-custom-fields --path <file-or-dir> [--project ALIAS]
+                                   [--config-file PATH] [--dry-run]
 """
 
 from __future__ import annotations
@@ -32,6 +34,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+
+try:
+    import argcomplete
+except ImportError:  # pragma: no cover
+    # Optional
+    argcomplete = None
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -206,6 +214,23 @@ def _cmd_generate_openapi(args: argparse.Namespace) -> None:
     print(f"Wrote OpenAPI spec to {path}")
 
 
+def _cmd_import_custom_fields(args: argparse.Namespace) -> None:
+    from polarion_mcp.config.importer import import_custom_fields
+
+    try:
+        result = import_custom_fields(
+            path=args.path,
+            project=args.project,
+            config_file=args.config_file,
+            dry_run=args.dry_run,
+        )
+    except ValueError as exc:
+        print(f"❌ {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    print(result.render())
+
+
 # ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
@@ -340,11 +365,39 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p_openapi.add_argument("--output", metavar="PATH")
 
+    p_import = sub.add_parser(
+        "import-custom-fields",
+        help="Import custom field XML exports into the Polarion config file.",
+    )
+    p_import.add_argument(
+        "--path",
+        required=True,
+        metavar="FILE-OR-DIR",
+        help="XML file or directory of '*-custom-fields.xml' exports.",
+    )
+    project_arg(p_import, required=False)
+    p_import.add_argument(
+        "--config-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to the Polarion config file. Defaults to auto-discovery "
+            "(local/polarion_config.yaml first, then repo root)."
+        ),
+    )
+    p_import.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show the changes without writing the config file.",
+    )
+
     return parser
 
 
 def main() -> None:
     parser = _build_parser()
+    if argcomplete is not None:
+        argcomplete.autocomplete(parser)
     args = parser.parse_args()
 
     if args.command is None:
@@ -371,6 +424,7 @@ def main() -> None:
         "serve": _cmd_serve,
         "docgen": _cmd_docgen,
         "generate-openapi": _cmd_generate_openapi,
+        "import-custom-fields": _cmd_import_custom_fields,
     }
 
     dispatch[args.command](args)

@@ -19,12 +19,12 @@ from typing import Dict, Iterable, Literal
 import yaml
 from fastmcp.tools.tool import FunctionTool
 
+from polarion_mcp.core.config import find_config_path
 from polarion_mcp.mcp.tools import mcp
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_FULL_PATH = REPO_ROOT / "generated" / "agent_instructions.md"
 DEFAULT_SIMPLE_PATH = REPO_ROOT / "generated" / "agent_instructions_simple.md"
-CONFIG_PATH = REPO_ROOT / "polarion_config.yaml"
 Variant = Literal["full", "simple"]
 
 
@@ -75,10 +75,11 @@ def _format_output_schema(schema: dict | None) -> str:
 
 
 def _load_config() -> dict:
-    """Load the polarion_config.yaml file."""
-    if not CONFIG_PATH.exists():
+    """Load the configured Polarion config file."""
+    config_path = find_config_path()
+    if config_path is None or not config_path.exists():
         return {}
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 

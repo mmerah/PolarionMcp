@@ -53,22 +53,23 @@ mcp-polarion search-plans "templateId:release" -p releases
 
 # Servers
 mcp-polarion serve                          # HTTP works for all clients
-mcp-polarion serve --mode stdio             # stdio transport (.mcp.json)
+mcp-polarion serve --mode stdio             # stdio transport for local .mcp.json
 mcp-polarion serve --port 9000 --log-level DEBUG
 
 # Utilities. Output goes to generated/
 mcp-polarion docgen                         # generated/agent_instructions*.md
 mcp-polarion generate-openapi               # generated/openapi.yaml
+mcp-polarion import-custom-fields --path local/custom-fields/myproject
 ```
 
 The convenience script `run_server.sh` handles first-time venv setup and `.env` checks before calling `mcp-polarion serve`.
 
 ## Configuration
 
-The optional `polarion_config.yaml` unlocks project aliases, named queries, custom field mappings, and plan project support. Copy the example to get started:
+The optional local config unlocks project aliases, named queries, custom field mappings, and plan project support. The tracked example lives in `local/`. Copy it to get started:
 
 ```bash
-cp polarion_config.example.yaml polarion_config.yaml
+cp local/polarion_config.example.yaml local/polarion_config.yaml
 ```
 
 ```yaml
@@ -98,9 +99,25 @@ mcp-polarion docgen                         # generated/agent_instructions*.md
 mcp-polarion generate-openapi               # generated/openapi.yaml
 ```
 
-See [XML_PARSER.md](XML_PARSER.md) for importing custom field definitions from Polarion XML exports.
+For custom field imports, keep downloaded XML exports local and untracked:
+
+```text
+local/custom-fields/<project-alias>/
+  requirement-custom-fields.xml
+  defect-custom-fields.xml
+```
+
+Usually, those custom-fields.yml are located in a Polarion project administration content. They can be downloaded from there. Then import them with:
+
+```bash
+mcp-polarion import-custom-fields --path local/custom-fields/myproject
+```
+
+See [docs/XML_PARSER.md](docs/XML_PARSER.md) for the full import workflow.
 
 ## Available Tools
+
+See [docs/WORKFLOW_EXAMPLES.md](docs/WORKFLOW_EXAMPLES.md) for tool usage patterns.
 
 ### General
 | Tool | Description |
@@ -204,17 +221,28 @@ Use `generated/agent_instructions.md` as a knowledge file and `generated/agent_i
 ```
 polarion_mcp/
   core/           Polarion domain logic: client, config, settings, formatters
+  config/         Config discovery and XML import utilities
   mcp/            MCP layer: tool definitions, middleware, server, stdio
   rest_api/       REST API routes and OpenAPI spec generation
   docgen/         Agent instruction doc generator
   cli/            CLI entry point (mcp-polarion)
+docs/             Supporting guides and workflow references
+local/            Workspace-local config and XML exports
 generated/        Generated files (openapi.yaml, agent_instructions)
 tests/
-scripts/
-  parse_custom_fields.py   Import custom fields from Polarion XML exports
 run_server.sh              First-time bootstrapper (venv + deps + serve)
-polarion_config.example.yaml
 ```
+
+## Shell Completion
+
+Basic tab completion for subcommands and flags is available via `argcomplete`. After reinstalling the package, enable it in your shell:
+
+```bash
+pip install -e .
+eval "$(register-python-argcomplete mcp-polarion)"
+```
+
+For bash, add that line to `~/.bashrc`. For zsh, enable bash completion compatibility first, then register the same command.
 
 ## Development
 

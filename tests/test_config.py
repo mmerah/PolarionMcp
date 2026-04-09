@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import yaml
 
-from polarion_mcp.core.config import ConfigManager, PolarionConfig
+from polarion_mcp.core.config import ConfigManager, PolarionConfig, find_config_path
 
 
 class TestConfigManager:
@@ -80,6 +80,19 @@ class TestConfigManager:
             assert manager.config.projects["testproj"].id == "TEST_PROJECT"
         finally:
             Path(temp_path).unlink()
+
+    def test_find_config_path_prefers_local_directory(self, tmp_path, monkeypatch):
+        """local/polarion_config.yaml should be preferred over the repo root."""
+        local_dir = tmp_path / "local"
+        local_dir.mkdir()
+        local_path = local_dir / "polarion_config.yaml"
+        root_path = tmp_path / "polarion_config.yaml"
+        local_path.write_text("projects: {}\n", encoding="utf-8")
+        root_path.write_text("projects: {}\n", encoding="utf-8")
+
+        monkeypatch.chdir(tmp_path)
+
+        assert find_config_path() == Path("local/polarion_config.yaml")
 
     def test_resolve_project_id(self):
         """Test project ID resolution from aliases."""

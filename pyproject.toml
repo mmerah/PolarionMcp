@@ -22,6 +22,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
+    "argcomplete>=3.5.0",
     "pydantic>=2.0.0,<2.12",
     "pydantic-settings>=2.0.0,<2.12",
     "polarion>=1.0.0",
@@ -43,6 +44,7 @@ mcp-polarion = "polarion_mcp.cli.main:main"
 [tool.setuptools]
 packages = [
     "polarion_mcp",
+    "polarion_mcp.config",
     "polarion_mcp.core",
     "polarion_mcp.mcp",
     "polarion_mcp.rest_api",
