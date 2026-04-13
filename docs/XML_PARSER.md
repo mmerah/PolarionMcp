@@ -7,13 +7,13 @@ Quick utility to parse Polarion XML custom field definitions and update the loca
 Recommended workflow:
 
 ```bash
-mcp-polarion import-custom-fields --path local/custom-fields/dlco-platform
+mcp-polarion import-custom-fields --path local/custom-fields/my-project
 ```
 
 Single-file import still works:
 
 ```bash
-mcp-polarion import-custom-fields --path local/custom-fields/dlco-platform/regulatoryRequirement-custom-fields.xml
+mcp-polarion import-custom-fields --path local/custom-fields/my-projec/regulatoryRequirement-custom-fields.xml
 ```
 
 ## Options

@@ -37,7 +37,7 @@ mcp-polarion get ADC-1234                   # project inferred from ID prefix
 mcp-polarion get ADC-1234 -p myproject
 mcp-polarion search "type:defect AND status:open" -p myproject
 mcp-polarion search "query:open_bugs" -p myproject  # named query
-mcp-polarion search "type:defect" -p myproject --fields "id,title,status,customFields.severity"
+mcp-polarion search "type:defect" -p myproject --fields "id,title,status"
 
 # Tests & documents
 mcp-polarion test-runs -p myproject
